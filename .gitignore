@@ -6,3 +6,6 @@ plugins/
 
 # Node modules
 node_modules
+
+# ENV
+.env

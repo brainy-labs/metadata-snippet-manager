@@ -1,17 +1,43 @@
-import neo4j from "neo4j-driver";
+import neo4j, { Driver, Session } from "neo4j-driver";
+import * as dotenv from 'dotenv';
 
-const driver = neo4j.driver(
-  "bolt://localhost:7687",
-  neo4j.auth.basic("neo4j", "password")
-);
+dotenv.config();
 
-export async function test() {
-  const session = driver.session();
-  try {
-    const result = await session.run("RETURN 1 AS num");
-    console.log("Connessione OK:", result.records[0].get("num").toNumber());
-  } finally {
-    await session.close();
-    await driver.close();
-  }
+export class DB {
+    private driver: Driver;
+    private session: Session | null = null;
+
+    constructor() {
+        if (!process.env.NEO4J_URI || !process.env.NEO4J_USER || !process.env.NEO4J_PASSWORD) {
+            throw new Error(
+                "Missing env variables"
+            )
+        } 
+
+        this.driver = neo4j.driver(
+            process.env.NEO4J_URI,
+            neo4j.auth.basic(process.env.NEO4J_USER, process.env.NEO4J_PASSWORD),
+            {
+                maxConnectionPoolSize: 20,
+                connectionAcquisitionTimeout: 20000
+            }
+        );
+    }
+
+    async test(): Promise<number> {
+        this.session = this.driver.session();
+        try {
+            const result = await this.session.run("RETURN 1 AS num");
+            return result.records[0].get("num").toNumber();
+        } catch {
+            return -1;
+        } finally {
+            await this.session.close();
+            this.session = null;
+        }
+    }
+
+    async close(): Promise<void> {
+        this.driver.close();
+    }
 }
