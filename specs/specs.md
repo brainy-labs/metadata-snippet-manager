@@ -1,6 +1,7 @@
 # Specifiche del progetto
 
-## Nome 
+## Nome (Provvisorio)
+msm - Meta Snippet Manager
 
 ## Descrizione
 Snippet manager basato su MCP server. Il software aiuta a gestire i propri snippet di codice in modo intelligente, attraverso metadati (etichette) descrittivi. Ci sono due macro-categorie: snippet di concetti e snippet di linguaggio. 
@@ -8,13 +9,25 @@ Snippet manager basato su MCP server. Il software aiuta a gestire i propri snipp
 - Gli snippet di linguaggio servono a salvare del codice che abbia lo scopo di ricordare velocemente dei concetti inerenti a un linguaggio specifico (costrutti di linguaggi/librerie).
 
 ## Tecnologie
+- NodeJS
+- TypeScript
+- MCP SDK
+- Neo4j
 
 ## Funzionalità
-### User stories
+### Metadati
+- Creare un metadato di concetto/linguaggio
+- Eliminare un metadato
+- Connettere metadati (solo della stessa categoria)
+- Eliminare la connessione tra metadati
+### Snippet
+- Creare uno snippet - con metadati associati 
+- Modifica/inserimento/eliminazione di metadati dallo snippet
+- Ricerca di snippet per nome
+- Ricerca di snippet con metadati
 
 ## Architettura
 ### Tools
-### Risorse
-### Prompts
 
 ## Database
+Database a grafo: neo4j.
