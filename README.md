@@ -1,4 +1,6 @@
-# mcp-server
+# MSM (Metadata Snippet Manager)
+
+A snippet manager based on a metadata system.
 
 ## License
 This project is distributed under the MIT License. See the file [LICENSE](./LICENSE) for details.
