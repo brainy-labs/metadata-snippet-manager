@@ -1,0 +1,27 @@
+{
+  "name": "msm",
+  "version": "0.1.0",
+  "description": "MCP server that works as a meta-data snippet manager",
+  "license": "MIT",
+  "author": "Daniele Vito Ardito",
+  "type": "module",
+  "bin": {
+    "msm": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && shx cp instructions.md dist/ && shx chmod +x dist/*.js",
+    "prepare": "npm run build",
+    "watch": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.2",
+    "neo4j-driver": "~5.28.0",
+    "shx": "^0.4.0",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.24.6"
+  }
+}

@@ -1,0 +1,8 @@
+# Neo4j Docker
+data/
+logs/
+import/
+plugins/
+
+# Node modules
+node_modules
