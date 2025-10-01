@@ -12,9 +12,22 @@ const __dirname = dirname(__filename);
 const parentDir = resolve(__dirname, "..");
 const instructions = readFileSync(join(parentDir, "instructions.md"), "utf-8");
 const ToolInputSchema = ToolSchema.shape.inputSchema;
+const TestAddFileSchema = z.object({
+    name: z.string().max(30).describe("Name of file to add"),
+    content: z.string().max(500).describe("Content of file")
+});
+const TestReadFileSchema = z.object({
+    name: z.string().describe("Name of file to read")
+});
+const TestRemoveFileSchema = z.object({
+    name: z.string().describe("Name of file to read")
+});
 var ToolName;
 (function (ToolName) {
-    ToolName["TEST"] = "test";
+    ToolName["TEST_DB"] = "test_db";
+    ToolName["TEST_ADD_FILE"] = "test_add_file";
+    ToolName["TEST_READ_FILE"] = "test_read_file";
+    ToolName["TEST_REMOVE_FILE"] = "test_remove_file";
 })(ToolName || (ToolName = {}));
 ;
 const db = (() => {
@@ -40,20 +53,98 @@ export const createServer = () => {
     server.setRequestHandler(ListToolsRequestSchema, async () => {
         const tools = [
             {
-                name: ToolName.TEST,
+                name: ToolName.TEST_DB,
                 description: "Tests db connection",
                 inputSchema: zodToJsonSchema(z.object({}))
-            }
+            },
+            {
+                name: ToolName.TEST_ADD_FILE,
+                description: "Test add a file in storage and db",
+                inputSchema: zodToJsonSchema(TestAddFileSchema)
+            },
+            {
+                name: ToolName.TEST_READ_FILE,
+                description: "Test read a file in storage and db",
+                inputSchema: zodToJsonSchema(TestReadFileSchema)
+            },
+            {
+                name: ToolName.TEST_REMOVE_FILE,
+                description: "Test remove a file in storage and db",
+                inputSchema: zodToJsonSchema(TestRemoveFileSchema)
+            },
         ];
         return { tools };
     });
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { name, arguments: args } = request.params;
-        if (name === ToolName.TEST) {
-            const res = await db.test();
+        if (name === ToolName.TEST_DB) {
+            const res = await db.test_db_connection();
             return {
                 content: [{ type: "text", text: `Test returned ${res}` }]
             };
+        }
+        if (name === ToolName.TEST_ADD_FILE) {
+            const validatedArgs = TestAddFileSchema.parse(args);
+            let text = `Failed to add file`;
+            try {
+                await db.test_add_file(validatedArgs.name, validatedArgs.content);
+                text = `
+                    Success! \n
+                    File added: \n
+                    - name: ${validatedArgs.name}, \n
+                    - content: ${validatedArgs.content}, \n
+                `;
+            }
+            finally {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: text
+                        }
+                    ]
+                };
+            }
+        }
+        if (name === ToolName.TEST_READ_FILE) {
+            const validatedArgs = TestReadFileSchema.parse(args);
+            let text = `Failed to read file`;
+            try {
+                const res = await db.test_read_file(validatedArgs.name);
+                if (res === undefined)
+                    text = `Non-existent file`;
+                else {
+                    text = `Success! \n File: \n - name: ${validatedArgs.name} - content: ${res}`;
+                }
+            }
+            finally {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: text
+                        }
+                    ]
+                };
+            }
+        }
+        if (name === ToolName.TEST_REMOVE_FILE) {
+            const validatedArgs = TestReadFileSchema.parse(args);
+            let text = `Failed to remove file`;
+            try {
+                await db.test_remove_file(validatedArgs.name);
+                text = `Success! \n File: \n - name: ${validatedArgs.name}`;
+            }
+            finally {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: text
+                        }
+                    ]
+                };
+            }
         }
         throw new Error(`Unknown tool: ${name}`);
     });
