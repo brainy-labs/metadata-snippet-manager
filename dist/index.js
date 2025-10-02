@@ -31,6 +31,8 @@ var ToolName;
     ToolName["TEST_READ_FILE"] = "test_read_file";
     ToolName["TEST_REMOVE_FILE"] = "test_remove_file";
     ToolName["CLEAR"] = "clear";
+    ToolName["GET_ALL_SNIPPETS"] = "get_all_snippets";
+    ToolName["GET_ALL_METADATA"] = "get_all_metadata";
     ToolName["CREATE_METADATA"] = "create_metadata";
     ToolName["CREATE_SNIPPET"] = "create_snippet";
 })(ToolName || (ToolName = {}));
@@ -92,35 +94,63 @@ export const createServer = () => {
                 description: "Create a snippet with metadata",
                 inputSchema: zodToJsonSchema(CreateSnippetSchema)
             },
+            {
+                name: ToolName.GET_ALL_SNIPPETS,
+                description: "Get all snippets",
+                inputSchema: zodToJsonSchema(z.object({}))
+            },
+            {
+                name: ToolName.GET_ALL_METADATA,
+                description: "Get all metadata",
+                inputSchema: zodToJsonSchema(z.object({}))
+            }
         ];
         return { tools };
     });
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { name, arguments: args } = request.params;
         if (name === ToolName.TEST_DB) {
-            const res = await db.test_db_connection();
-            return {
-                content: [{ type: "text", text: `Test returned ${res}` }]
-            };
-        }
-        if (name === ToolName.TEST_ADD_FILE) {
-            const validatedArgs = TestAddFileSchema.parse(args);
-            let text = `Failed to add file`;
             try {
-                await db.test_add_file(validatedArgs.name, validatedArgs.content);
-                text = `
-                    Success! \n
-                    File added: \n
-                    - name: ${validatedArgs.name}, \n
-                    - content: ${validatedArgs.content}, \n
-                `;
-            }
-            finally {
+                const res = await db.test_db_connection();
                 return {
                     content: [
                         {
                             type: "text",
-                            text: text
+                            text: JSON.stringify({ success: true, content: `Test returned ${res}` })
+                        }
+                    ]
+                };
+            }
+            catch (error) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: JSON.stringify({ success: false, error: error.message || 'DB test failed' })
+                        }
+                    ]
+                };
+            }
+        }
+        if (name === ToolName.TEST_ADD_FILE) {
+            const validatedArgs = TestAddFileSchema.parse(args);
+            try {
+                await db.test_add_file(validatedArgs.name, validatedArgs.content);
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: JSON.stringify({ success: true, content: `File added: ${validatedArgs.name}` })
+                        }
+                    ]
+                };
+            }
+            catch (error) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: JSON.stringify({ success: false, error: error.message || 'Failed to add file' })
                         }
                     ]
                 };
@@ -128,39 +158,57 @@ export const createServer = () => {
         }
         if (name === ToolName.TEST_READ_FILE) {
             const validatedArgs = TestReadFileSchema.parse(args);
-            let text = `Failed to read file`;
             try {
                 const res = await db.test_read_file(validatedArgs.name);
-                if (res === undefined)
-                    text = `Non-existent file`;
-                else {
-                    text = `Success! \n File: \n - name: ${validatedArgs.name} - content: ${res}`;
+                if (!res) {
+                    return {
+                        content: [
+                            {
+                                type: "text",
+                                text: JSON.stringify({ success: false, error: 'Non-existent file' })
+                            }
+                        ]
+                    };
                 }
-            }
-            finally {
                 return {
                     content: [
                         {
                             type: "text",
-                            text: text
+                            text: JSON.stringify({ success: true, content: res })
+                        }
+                    ]
+                };
+            }
+            catch (error) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: JSON.stringify({ success: false, error: error.message || 'Failed to read file' })
                         }
                     ]
                 };
             }
         }
         if (name === ToolName.TEST_REMOVE_FILE) {
-            const validatedArgs = TestReadFileSchema.parse(args);
-            let text = `Failed to remove file`;
+            const validatedArgs = TestRemoveFileSchema.parse(args);
             try {
                 await db.test_remove_file(validatedArgs.name);
-                text = `Success! \n File: \n - name: ${validatedArgs.name}`;
-            }
-            finally {
                 return {
                     content: [
                         {
                             type: "text",
-                            text: text
+                            text: JSON.stringify({ success: true, content: `File removed: ${validatedArgs.name}` })
+                        }
+                    ]
+                };
+            }
+            catch (error) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: JSON.stringify({ success: false, error: error.message || 'Failed to remove file' })
                         }
                     ]
                 };
@@ -169,51 +217,127 @@ export const createServer = () => {
         if (name === ToolName.CLEAR) {
             try {
                 await db.clear();
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: JSON.stringify({ success: true, content: 'DB and storage cleared' })
+                        }
+                    ]
+                };
             }
-            finally {
-                return { content: [{ type: "text", text: "db and storage cleared" }] };
+            catch (error) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: JSON.stringify({ success: false, error: error.message || 'Failed to clear DB' })
+                        }
+                    ]
+                };
             }
         }
         if (name === ToolName.CREATE_METADATA) {
             const metadata = CreateMetadataSchema.parse(args);
-            let text = `Failed to create metadata`;
             try {
-                const res = await db.createMetadata(metadata);
-                text = `Success! \n ${metadata.name} added:\n
-                            - category: ${metadata.category}`;
+                await db.createMetadata(metadata);
                 return {
                     content: [
                         {
                             type: "text",
-                            text: text
-                        },
+                            text: JSON.stringify({ success: true, content: `Metadata added: ${metadata.name} (category: ${metadata.category})` })
+                        }
                     ]
                 };
             }
             catch (error) {
-                return { content: [{ type: "text", test: text + error }] };
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: JSON.stringify({ success: false, error: error.message || 'Failed to create metadata' })
+                        }
+                    ]
+                };
             }
         }
         if (name === ToolName.CREATE_SNIPPET) {
             const snippet = CreateSnippetSchema.parse(args);
-            let text = `Failed to create snippet`;
             try {
                 const res = await db.createSnippet(snippet);
-                text = `Success! \n ${snippet.name} added:\n
-                        - content: ${snippet.content}\n
-                        - extension: ${snippet.extension}\n
-                        - metadata: ${snippet.metadataNames}\n`;
                 return {
                     content: [
                         {
                             type: "text",
-                            text: text
-                        },
+                            text: JSON.stringify({
+                                success: true,
+                                content: {
+                                    name: res.name,
+                                    metadata: snippet.metadataNames,
+                                    category: snippet.category,
+                                    extension: snippet.extension,
+                                    size: res.size,
+                                }
+                            })
+                        }
                     ]
                 };
             }
             catch (error) {
-                return { content: [{ type: "text", test: text + error }] };
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: JSON.stringify({ success: false, error: error.message || 'Failed to create snippet' })
+                        }
+                    ]
+                };
+            }
+        }
+        if (name === ToolName.GET_ALL_SNIPPETS) {
+            try {
+                const res = await db.getAllSnippets();
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: JSON.stringify({ success: true, content: res }, null, 2)
+                        }
+                    ]
+                };
+            }
+            catch (error) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: JSON.stringify({ success: false, error: error.message || 'Failed to get snippets' })
+                        }
+                    ]
+                };
+            }
+        }
+        if (name === ToolName.GET_ALL_METADATA) {
+            try {
+                const res = await db.getAllMetadata();
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: JSON.stringify({ success: true, content: res }, null, 2)
+                        }
+                    ]
+                };
+            }
+            catch (error) {
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: JSON.stringify({ success: false, error: error.message || 'Failed to get metadata' })
+                        }
+                    ]
+                };
             }
         }
         throw new Error(`Unknown tool: ${name}`);

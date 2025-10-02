@@ -51,6 +51,14 @@ export class DB {
     async createMetadata(input) {
         const session = this.driver.session();
         try {
+            // Check if metadata already exists
+            const res = await session.run(`
+                MATCH (m: Metadata)
+                WHERE m.name = $name
+                RETURN m
+            `, { name: input.name });
+            if (res.records.length > 0)
+                throw new Error(`Name already taken`);
             // If there is a parent, verify it is from the same category
             if (input.parentName) {
                 const parentCheck = await session.run(`
@@ -93,64 +101,113 @@ export class DB {
         }
     }
     /**
-     *
+     * TODO: add category type to quick check metadata
      * @param input Snippet to insert
      * @returns the Snippet inserted
      */
     async createSnippet(input) {
         const session = this.driver.session();
         try {
+            // Check if snippet already exists
+            const res = await session.run(`
+                MATCH (s:Snippet)
+                WHERE s.name = $name
+                return s
+            `, { name: input.name });
+            if (res.records.length > 0)
+                throw new Error(`Name already taken`);
             // Check metadata existence
             const metadataCheck = await session.run(`
                 MATCH (m:Metadata)
-                WHERE m.name IN $names
-                RETURN m.name as name, m.category as category
-            `, { names: input.metadataNames });
+                WHERE m.name IN $names AND m.category = $category
+                RETURN m.name as name
+            `, {
+                names: input.metadataNames,
+                category: input.category
+            });
             if (metadataCheck.records.length !== input.metadataNames.length) {
                 throw new Error(`Some metadata names don't exists`);
             }
-            // Check metadatas have the same category
-            const categories = new Set(metadataCheck.records.map(r => r.get('category')));
-            if (categories.size > 1) {
-                throw new Error("All metadata must be of the same category");
-            }
-            // Create file in storage
             const filename = `${input.name}.${input.extension}`;
             const path = join(storageDir, filename);
+            // Create file in storage
             await fs.mkdir(storageDir, { recursive: true });
             await fs.writeFile(path, input.content);
             const stats = await fs.stat(path);
-            // Insert snippet in database
-            const result = await session.run(`
-                CREATE (s:Snippet {
-                    name: $name,
-                    path: $path,
-                    extension: $extension,
-                    size: $size,
-                    createdAt: datetime()
-                })
-                WITH s
-                UNWIND $metadataNames as metadataName
-                MATCH (m: Metadata {name: metadataName})
-                MERGE (s)-[:HAS_METADATA]->(m)
-                RETURN s, s.createdAt as createdAt
-            `, {
-                name: input.name,
-                path: path,
-                extension: input.extension,
-                size: stats.size,
-                metadataNames: input.metadataNames
+            try {
+                // Insert snippet in database
+                const result = await session.run(`
+                    CREATE (s:Snippet {
+                        name: $name,
+                        path: $path,
+                        extension: $extension,
+                        size: $size,
+                        createdAt: datetime()
+                    })
+                    WITH s
+                    UNWIND $metadataNames as metadataName
+                    MATCH (m: Metadata {name: metadataName})
+                    MERGE (s)-[:HAS_METADATA]->(m)
+                    RETURN s, s.createdAt as createdAt
+                `, {
+                    name: input.name,
+                    path: path,
+                    extension: input.extension,
+                    size: stats.size,
+                    metadataNames: input.metadataNames
+                });
+                const record = result.records[0];
+                const snippet = record.get('s').properties;
+                const createdAt = record.get('createdAt');
+                return {
+                    name: snippet.name,
+                    path: snippet.path,
+                    extension: snippet.extension,
+                    size: snippet.size,
+                    createdAt: new Date(createdAt.toString())
+                };
+            }
+            catch {
+                await fs.unlink(path);
+                throw new Error('Failed to add snippet in db');
+            }
+        }
+        finally {
+            await session.close();
+        }
+    }
+    /**
+     * @returns A list of all metadata
+     */
+    async getAllMetadata() {
+        const session = this.driver.session();
+        try {
+            const res = await session.run(`
+                MATCH (m:Metadata)
+                RETURN m
+            `);
+            const response = res.records.map(record => {
+                const node = record.get('m');
+                return node.properties;
             });
-            const record = result.records[0];
-            const snippet = record.get('s').properties;
-            const createdAt = record.get('createdAt');
-            return {
-                name: snippet.name,
-                path: snippet.path,
-                extension: snippet.extension,
-                size: snippet.size,
-                createdAt: new Date(createdAt.toString())
-            };
+            return response;
+        }
+        finally {
+            await session.close();
+        }
+    }
+    async getAllSnippets() {
+        const session = this.driver.session();
+        try {
+            const res = await session.run(`
+                MATCH (s:Snippet)
+                RETURN s
+            `);
+            const response = res.records.map(record => {
+                const node = record.get('s');
+                return node.properties;
+            });
+            return response;
         }
         finally {
             await session.close();

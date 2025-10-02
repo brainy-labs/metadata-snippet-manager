@@ -17,14 +17,18 @@ Snippet manager basato su MCP server. Il software aiuta a gestire i propri snipp
 ## Funzionalità
 ### Metadati
 - Creare un metadato di concetto/linguaggio
+- Creare un albero di metadati
+- Visualizzare un albero di metadati
 - Eliminare un metadato
-- Connettere metadati (solo della stessa categoria)
 - Eliminare la connessione tra metadati
 ### Snippet
 - Creare uno snippet - con metadati associati 
+- Tradurre uno snippet di concetto in un altro linguaggio
 - Modifica/inserimento/eliminazione di metadati dallo snippet
 - Ricerca di snippet per nome
 - Ricerca di snippet con metadati
+### Ibrido
+- Creare uno snippet con un albero di metadati
 
 ## Architettura
 ### Tools

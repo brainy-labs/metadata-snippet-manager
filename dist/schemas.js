@@ -15,7 +15,8 @@ export const CreateSnippetSchema = z.object({
     name: z.string().min(1).max(255),
     content: z.string(),
     extension: z.string().min(1).max(10),
-    metadataNames: z.array(z.string()).min(1)
+    metadataNames: z.array(z.string()).min(1),
+    category: z.nativeEnum(MetadataCategory)
 });
 export const MetadataSchema = z.object({
     name: z.string().min(1).max(100),
