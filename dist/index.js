@@ -1,4 +1,5 @@
 import { DB } from "./db.js";
+import { CreateMetadataSchema, CreateSnippetSchema } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -12,6 +13,7 @@ const __dirname = dirname(__filename);
 const parentDir = resolve(__dirname, "..");
 const instructions = readFileSync(join(parentDir, "instructions.md"), "utf-8");
 const ToolInputSchema = ToolSchema.shape.inputSchema;
+// Schemas for MCP only
 const TestAddFileSchema = z.object({
     name: z.string().max(30).describe("Name of file to add"),
     content: z.string().max(500).describe("Content of file")
@@ -28,6 +30,9 @@ var ToolName;
     ToolName["TEST_ADD_FILE"] = "test_add_file";
     ToolName["TEST_READ_FILE"] = "test_read_file";
     ToolName["TEST_REMOVE_FILE"] = "test_remove_file";
+    ToolName["CLEAR"] = "clear";
+    ToolName["CREATE_METADATA"] = "create_metadata";
+    ToolName["CREATE_SNIPPET"] = "create_snippet";
 })(ToolName || (ToolName = {}));
 ;
 const db = (() => {
@@ -48,7 +53,7 @@ export const createServer = () => {
         capabilities: {
             tools: {}
         },
-        instructions
+        instructions,
     });
     server.setRequestHandler(ListToolsRequestSchema, async () => {
         const tools = [
@@ -71,6 +76,21 @@ export const createServer = () => {
                 name: ToolName.TEST_REMOVE_FILE,
                 description: "Test remove a file in storage and db",
                 inputSchema: zodToJsonSchema(TestRemoveFileSchema)
+            },
+            {
+                name: ToolName.CLEAR,
+                description: "Clear all data",
+                inputSchema: zodToJsonSchema(z.object({}))
+            },
+            {
+                name: ToolName.CREATE_METADATA,
+                description: "Create a metadata",
+                inputSchema: zodToJsonSchema(CreateMetadataSchema)
+            },
+            {
+                name: ToolName.CREATE_SNIPPET,
+                description: "Create a snippet with metadata",
+                inputSchema: zodToJsonSchema(CreateSnippetSchema)
             },
         ];
         return { tools };
@@ -146,21 +166,72 @@ export const createServer = () => {
                 };
             }
         }
+        if (name === ToolName.CLEAR) {
+            try {
+                await db.clear();
+            }
+            finally {
+                return { content: [{ type: "text", text: "db and storage cleared" }] };
+            }
+        }
+        if (name === ToolName.CREATE_METADATA) {
+            const metadata = CreateMetadataSchema.parse(args);
+            let text = `Failed to create metadata`;
+            try {
+                const res = await db.createMetadata(metadata);
+                text = `Success! \n ${metadata.name} added:\n
+                            - category: ${metadata.category}`;
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: text
+                        },
+                    ]
+                };
+            }
+            catch (error) {
+                return { content: [{ type: "text", test: text + error }] };
+            }
+        }
+        if (name === ToolName.CREATE_SNIPPET) {
+            const snippet = CreateSnippetSchema.parse(args);
+            let text = `Failed to create snippet`;
+            try {
+                const res = await db.createSnippet(snippet);
+                text = `Success! \n ${snippet.name} added:\n
+                        - content: ${snippet.content}\n
+                        - extension: ${snippet.extension}\n
+                        - metadata: ${snippet.metadataNames}\n`;
+                return {
+                    content: [
+                        {
+                            type: "text",
+                            text: text
+                        },
+                    ]
+                };
+            }
+            catch (error) {
+                return { content: [{ type: "text", test: text + error }] };
+            }
+        }
         throw new Error(`Unknown tool: ${name}`);
     });
     return { server };
 };
-async function main() {
+async function main(db) {
     const transport = new StdioServerTransport();
     const { server } = createServer();
     await server.connect(transport);
     console.error("MSM MCP-server started");
     process.on("SIGINT", async () => {
+        await db.close();
         await server.close();
         process.exit(0);
     });
 }
-main().catch((error) => {
+main(db).catch((error) => {
     console.error("Server error:", error);
     process.exit(1);
 });
