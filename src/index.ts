@@ -284,6 +284,7 @@ export const createServer = () => {
             }
         }
 
+        // TODO: better error handling
         if (name === ToolName.CREATE_SNIPPET) {
             const snippet = CreateSnippetSchema.parse(args);
             try {

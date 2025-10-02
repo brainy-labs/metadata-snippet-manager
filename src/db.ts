@@ -132,19 +132,11 @@ export class DB {
         const session = this.driver.session();
         try{
             // Check if snippet already exists
-            const res = await session.run(`
-                MATCH (s:Snippet)
-                WHERE s.name = $name
-                return s
-            `, {name: input.name});
+            const res = await session.run(` MATCH (s:Snippet) WHERE s.name = $name RETURN s`, {name: input.name});
             if (res.records.length > 0) throw new Error(`Name already taken`);
 
             // Check metadata existence
-            const metadataCheck = await session.run(`
-                MATCH (m:Metadata)
-                WHERE m.name IN $names AND m.category = $category
-                RETURN m.name as name
-            `, 
+            const metadataCheck = await session.run(`MATCH (m:Metadata) WHERE m.name IN $names AND m.category = $category RETURN m.name as name`, 
             { 
                 names: input.metadataNames,
                 category: input.category
@@ -207,15 +199,13 @@ export class DB {
     }
 
     /** 
-     * @returns A list of all metadata
+     * Get all metadata from db
+     * @returns an array of all metadata
      */
     async getAllMetadata(): Promise<Metadata[]> {
         const session = this.driver.session();
         try {
-            const res = await session.run(`
-                MATCH (m:Metadata)
-                RETURN m
-            `);
+            const res = await session.run(`MATCH (m:Metadata) RETURN m`);
             
             const response: Metadata[] = res.records.map(record => {
                 const node = record.get('m');
@@ -228,13 +218,14 @@ export class DB {
         }
     }
 
+    /**
+     * Get all snippets from db 
+     * @returns an array of all snippets 
+     */
     async getAllSnippets(): Promise<Snippet[]> {
         const session = this.driver.session();
         try{
-            const res = await session.run(`
-                MATCH (s:Snippet)
-                RETURN s
-            `);
+            const res = await session.run(`MATCH (s:Snippet) RETURN s`);
 
             const response: Snippet[] = res.records.map(record => {
                 const node = record.get('s');
@@ -317,6 +308,10 @@ export class DB {
 
     }
 
+    /**
+     * db connection test function
+     * @returns if ok return 1 else returns -1
+     */
     async test_db_connection(): Promise<number> {
         const session: Session = this.driver.session();
         try {
@@ -368,6 +363,7 @@ export class DB {
         finally { session.close(); }
     }
 
+    // TODO: remove
     async test_read_file(name: string): Promise<string | undefined> {
         const path = join(storageDir, name);
 
@@ -384,13 +380,20 @@ export class DB {
         finally { session.close() }
     }
 
+    /**
+     * Run a custom query
+     * @param query 
+     * @param params 
+     * @returns 
+     */
     async runCustomQuery(query: string, params: any = {}) {
         const session: Session = this.driver.session();
         
         try{
             const result = await session.run(query, params);
+            await session.close();
             return result;
-        } finally { 
+        } catch { 
             await session.close(); 
             return [];
         }
