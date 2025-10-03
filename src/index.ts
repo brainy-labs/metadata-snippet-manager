@@ -142,7 +142,7 @@ export const createServer = () => {
             const metadata = CreateMetadataSchema.parse(args);
             try {
                 await db.createMetadata(metadata);
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: `Metadata added: ${metadata.name} (category: ${metadata.category})` }) } ] };
+                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: metadata }) } ] };
             } catch (error: any) {
                 return { content: [ { type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to create metadata' }) } ] };
             }
@@ -156,16 +156,7 @@ export const createServer = () => {
                     content: [
                         {
                             type: "text",
-                            text: JSON.stringify({
-                                success: true,
-                                content: {
-                                    name: res.name,
-                                    metadata: snippet.metadataNames,
-                                    category: snippet.category,
-                                    extension: snippet.extension,
-                                    size: res.size,
-                                }
-                            })
+                            text: JSON.stringify({ success: true, res })
                         }
                     ]
                 };
@@ -219,7 +210,7 @@ export const createServer = () => {
                 const res = await db.updateSnippetContent(validatedArgs);
                 return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res}) } ] }
             } catch (error: any) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: error.message }) } ] }
+                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message }) } ] }
            }
         }
 

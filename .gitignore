@@ -4,9 +4,6 @@ logs/
 import/
 plugins/
 
-# storage
-storage
-
 # Node modules
 node_modules
 

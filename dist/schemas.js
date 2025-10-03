@@ -7,7 +7,6 @@ export var MetadataCategory;
 export const SnippetSchema = z.object({
     name: z.string().min(1).max(255),
     content: z.string(),
-    path: z.string().min(1),
     extension: z.string().min(1).max(10),
     size: z.number().positive(),
     createdAt: z.date(),
@@ -35,11 +34,10 @@ export const DeleteMetadataSchema = z.object({
     names: z.array(z.string().min(1).max(100))
 });
 export const DeleteSnippetsSchema = z.object({
-    nameExts: z.array(z.string().regex(/\.[a-zA-Z0-9]{1,10}$/))
+    names: z.array(z.string().min(1).max(255))
 });
 export const updateSnippetContentSchema = z.object({
     name: z.string().min(1).max(255),
-    extension: z.string().min(1).max(10),
     content: z.string()
 });
 export const SearchSnippetByNameSchema = z.object({

@@ -1,12 +1,6 @@
 import neo4j from "neo4j-driver";
 import * as dotenv from 'dotenv';
-import * as fs from 'fs/promises';
-import { dirname, join, resolve } from "path";
-import { fileURLToPath } from "url";
 dotenv.config();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const storageDir = resolve(__dirname, "../storage");
 var ConstraintType;
 (function (ConstraintType) {
     ConstraintType["EXISTS"] = "IS NOT NULL";
@@ -33,7 +27,7 @@ export class DB {
     async initialize() {
         const session = this.driver.session();
         try {
-            await this.create_field_constraint(session, "Snippet", "snippet_path_unique", "path", ConstraintType.UNIQUE);
+            await this.create_field_constraint(session, "Snippet", "snippet_name_unique", "name", ConstraintType.UNIQUE);
             await this.create_field_constraint(session, "Metadata", "metadata_name_existence", "name", ConstraintType.EXISTS);
             await this.create_field_constraint(session, "Metadata", "metadata_name_unique", "name", ConstraintType.UNIQUE);
             await this.create_index(session, "Metadata", "metadata_category", "category");
@@ -110,11 +104,8 @@ export class DB {
     }
     async deleteSnippetsByName(input) {
         const session = this.driver.session();
-        const paths = input.nameExts.map((nameExt) => {
-            return join(storageDir, nameExt);
-        });
         try {
-            const res = await session.run(`UNWIND $paths as path MATCH (s:Snippet {path: path}) DETACH DELETE s`, { paths: paths });
+            const res = await session.run(`UNWIND $names as name MATCH (s:Snippet {name: name}) DETACH DELETE s`, { names: input.names });
         }
         finally {
             await session.close();
@@ -140,53 +131,31 @@ export class DB {
             if (metadataCheck.records.length !== input.metadataNames.length) {
                 throw new Error(`Some metadata names don't exists`);
             }
-            const filename = `${input.name}.${input.extension}`;
-            const path = join(storageDir, filename);
-            // Create file in storage
-            await fs.mkdir(storageDir, { recursive: true });
-            await fs.writeFile(path, input.content);
-            const stats = await fs.stat(path);
-            try {
-                // Insert snippet in database
-                const result = await session.run(`
-                    CREATE (s:Snippet {
-                        name: $name,
-                        path: $path,
-                        extension: $extension,
-                        size: $size,
-                        createdAt: datetime()
-                    })
-                    WITH s
-                    UNWIND $metadataNames as metadataName
-                    MATCH (m: Metadata {name: metadataName})
-                    MERGE (s)-[:HAS_METADATA]->(m)
-                    RETURN s, s.createdAt as createdAt
-                `, {
-                    name: input.name,
-                    path: path,
-                    extension: input.extension,
-                    size: stats.size,
-                    metadataNames: input.metadataNames
-                });
-                const record = result.records[0];
-                const snippet = record.get('s').properties;
-                const createdAt = record.get('createdAt');
-                const content = await fs.readFile(path, "utf-8");
-                return {
-                    name: snippet.name,
-                    content: content,
-                    path: snippet.path,
-                    extension: snippet.extension,
-                    size: snippet.size,
-                    createdAt: new Date(createdAt.toString()),
-                    metadataNames: input.metadataNames,
-                    category: input.category
-                };
-            }
-            catch {
-                await fs.unlink(path);
-                throw new Error('Failed to add snippet in db');
-            }
+            // Insert snippet in database
+            const result = await session.run(`
+                CREATE (s:Snippet {
+                    name: $name,
+                    content: $content,
+                    extension: $extension,
+                    size: $size,
+                    createdAt: datetime()
+                })
+                WITH s
+                UNWIND $metadataNames as metadataName
+                MATCH (m: Metadata {name: metadataName})
+                MERGE (s)-[:HAS_METADATA]->(m)
+                RETURN s 
+            `, {
+                name: input.name,
+                content: input.content,
+                extension: input.extension,
+                size: input.content.length,
+                metadataNames: input.metadataNames
+            });
+            const record = result.records[0];
+            const snippet = record.get('s');
+            console.error(snippet.properties);
+            return { ...snippet.properties, metadataNames: input.metadataNames };
         }
         finally {
             await session.close();
@@ -222,7 +191,7 @@ export class DB {
                 WITH s, collect(DISTINCT m.category) AS categories, collect(DISTINCT m.name) AS metadataNames
                 RETURN {
                     name: s.name,
-                    path: s.path,
+                    content: s.content,
                     extension: s.extension,
                     size: s.size,
                     createdAt: s.createdAt,
@@ -230,12 +199,11 @@ export class DB {
                     metadataNames: metadataNames
                 } AS s
             `);
-            const response = await Promise.all(res.records.map(async (record) => {
+            const response = res.records.map(record => {
                 const node = record.get('s');
-                const content = await fs.readFile(node.path, 'utf-8');
-                const snippet = { ...node, content: content };
+                const snippet = node;
                 return snippet;
-            }));
+            });
             return response;
         }
         finally {
@@ -243,31 +211,31 @@ export class DB {
         }
     }
     async updateSnippetContent(input) {
-        const path = join(storageDir, `${input.name}.${input.extension}`);
-        try {
-            await fs.access(path, fs.constants.F_OK);
-        }
-        catch {
-            throw new Error(`File doesn't exists`);
-        }
-        await fs.writeFile(path, input.content);
         const session = this.driver.session();
         try {
             const res = await session.run(`
                 MATCH (s:Snippet)-[:HAS_METADATA]->(m:Metadata)
-                WHERE s.path = $path
+                WHERE s.name = $name
+                SET s.content = $content, s.size = $size
                 WITH s, collect(DISTINCT m.category) AS categories, collect(DISTINCT m.name) AS metadataNames
                 RETURN {
                     name: s.name,
-                    path: s.path,
+                    content: s.content,
                     extension: s.extension,
                     size: s.size,
                     createdAt: s.createdAt,
                     category: head(categories),
                     metadataNames: metadataNames
-                } AS s`, { path: path });
+                } AS s`, {
+                name: input.name,
+                content: input.content,
+                size: input.content.length
+            });
+            if (res.records.length === 0) {
+                throw new Error(`Snippet doesn't exist`);
+            }
             const s = res.records[0].get('s');
-            const snippet = { ...s, content: input.content };
+            const snippet = s;
             return snippet;
         }
         finally {
@@ -282,12 +250,6 @@ export class DB {
         try {
             // clean db
             await session.run("MATCH (n) DETACH DELETE n");
-            // clean storage
-            try {
-                const files = await fs.readdir(storageDir);
-                await Promise.all(files.map(file => fs.unlink(join(storageDir, file))));
-            }
-            catch { /* Directory might not exist, ok */ }
         }
         finally {
             await session.close();
