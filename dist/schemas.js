@@ -42,7 +42,7 @@ export const DeleteMetadataSchema = z.object({
 export const DeleteSnippetsSchema = z.object({
     names: z.array(z.string().min(1).max(255).toLowerCase())
 });
-export const updateSnippetContentSchema = z.object({
+export const UpdateSnippetContentSchema = z.object({
     name: z.string().min(1).max(255).toLowerCase(),
     content: z.string()
 });

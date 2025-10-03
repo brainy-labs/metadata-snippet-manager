@@ -61,11 +61,11 @@ export const DeleteSnippetsSchema = z.object({
 });
 export type DeleteSnippetsInput = z.infer<typeof DeleteSnippetsSchema>;
 
-export const updateSnippetContentSchema = z.object({
+export const UpdateSnippetContentSchema = z.object({
     name: z.string().min(1).max(255).toLowerCase(),
     content: z.string()
 });
-export type upDateSnippetContentInput = z.infer<typeof updateSnippetContentSchema>;
+export type upDateSnippetContentInput = z.infer<typeof UpdateSnippetContentSchema>;
 
 export const SearchSnippetByNameSchema = z.object({
     name: z.string().min(1).max(255).toLowerCase()

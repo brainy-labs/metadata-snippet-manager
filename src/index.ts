@@ -5,7 +5,8 @@ import {
     CreateSnippetSchema,
     DeleteMetadataSchema,
     DeleteSnippetsSchema,
-    updateSnippetContentSchema
+    SearchSnippetByNameSchema,
+    UpdateSnippetContentSchema
 } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { 
@@ -38,7 +39,8 @@ enum ToolName {
     CREATE_SNIPPET = "create_snippet",
     DELETE_METADATA = "delete_metadata",
     DELETE_SNIPPETS = "delete_snippets",
-    UPDATE_SNIPPET_CONTENT = "update_snippet_content"
+    UPDATE_SNIPPET_CONTENT = "update_snippet_content",
+    SEARCH_SNIPPET_BY_NAME = "search_snippet_by_name"
 };
 
 const db: DB = (() => {
@@ -110,7 +112,12 @@ export const createServer = () => {
             {
                 name: ToolName.UPDATE_SNIPPET_CONTENT,
                 description: "Update snippet content",
-                inputSchema: zodToJsonSchema(updateSnippetContentSchema) as ToolInput
+                inputSchema: zodToJsonSchema(UpdateSnippetContentSchema) as ToolInput
+            },
+            {
+                name: ToolName.SEARCH_SNIPPET_BY_NAME,
+                description: "Get snippet searching by name",
+                inputSchema: zodToJsonSchema(SearchSnippetByNameSchema) as ToolInput
             }
         ];
 
@@ -188,9 +195,9 @@ export const createServer = () => {
             const names = DeleteMetadataSchema.parse(args);
             try {
                 await db.deleteMetadataByName(names);
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: "Metadata deleted" } ) } ] }
+                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: "Metadata deleted" } ) } ] };
             } catch (error) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error || 'Failed to delete metadata' } ) } ] }
+                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error || 'Failed to delete metadata' } ) } ] };
             }
         }
 
@@ -198,20 +205,30 @@ export const createServer = () => {
             const names = DeleteSnippetsSchema.parse(args);
             try {
                 await db.deleteSnippetsByName(names);
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: "Snippets deleted" } ) } ] }
+                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: "Snippets deleted" } ) } ] };
             } catch (error) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: "Failed to delete snippets" } ) } ] }
+                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: "Failed to delete snippets" } ) } ] };
             }
         }
 
         if (name === ToolName.UPDATE_SNIPPET_CONTENT) {
-            const validatedArgs = updateSnippetContentSchema.parse(args);
+            const validatedArgs = UpdateSnippetContentSchema.parse(args);
             try {
                 const res = await db.updateSnippetContent(validatedArgs);
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res}) } ] }
+                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res}) } ] };
             } catch (error: any) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message }) } ] }
+                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message }) } ] };
            }
+        }
+
+        if (name === ToolName.SEARCH_SNIPPET_BY_NAME) {
+            const validatedArgs = SearchSnippetByNameSchema.parse(args);
+            try {
+                const res = await db.searchSnippetByName(validatedArgs);
+                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }) } ] };
+            } catch (error: any) {
+                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to search snippet"}) } ] };
+            }
         }
 
         throw new Error(`Unknown tool: ${name}`);
@@ -237,4 +254,4 @@ async function main(db: DB) {
 main(db).catch((error) => {
     console.error("Server error:", error);
     process.exit(1);
-})
+});

@@ -1,5 +1,5 @@
 import { DB } from "./db.js";
-import { CreateMetadataSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, updateSnippetContentSchema } from "./schemas.js";
+import { CreateMetadataSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -24,6 +24,7 @@ var ToolName;
     ToolName["DELETE_METADATA"] = "delete_metadata";
     ToolName["DELETE_SNIPPETS"] = "delete_snippets";
     ToolName["UPDATE_SNIPPET_CONTENT"] = "update_snippet_content";
+    ToolName["SEARCH_SNIPPET_BY_NAME"] = "search_snippet_by_name";
 })(ToolName || (ToolName = {}));
 ;
 const db = (() => {
@@ -91,7 +92,12 @@ export const createServer = () => {
             {
                 name: ToolName.UPDATE_SNIPPET_CONTENT,
                 description: "Update snippet content",
-                inputSchema: zodToJsonSchema(updateSnippetContentSchema)
+                inputSchema: zodToJsonSchema(UpdateSnippetContentSchema)
+            },
+            {
+                name: ToolName.SEARCH_SNIPPET_BY_NAME,
+                description: "Get snippet searching by name",
+                inputSchema: zodToJsonSchema(SearchSnippetByNameSchema)
             }
         ];
         return { tools };
@@ -184,13 +190,23 @@ export const createServer = () => {
             }
         }
         if (name === ToolName.UPDATE_SNIPPET_CONTENT) {
-            const validatedArgs = updateSnippetContentSchema.parse(args);
+            const validatedArgs = UpdateSnippetContentSchema.parse(args);
             try {
                 const res = await db.updateSnippetContent(validatedArgs);
                 return { content: [{ type: "text", text: JSON.stringify({ success: true, content: res }) }] };
             }
             catch (error) {
                 return { content: [{ type: "text", text: JSON.stringify({ success: false, content: error.message }) }] };
+            }
+        }
+        if (name === ToolName.SEARCH_SNIPPET_BY_NAME) {
+            const validatedArgs = SearchSnippetByNameSchema.parse(args);
+            try {
+                const res = await db.searchSnippetByName(validatedArgs);
+                return { content: [{ type: "text", text: JSON.stringify({ success: true, content: res }) }] };
+            }
+            catch (error) {
+                return { content: [{ type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to search snippet" }) }] };
             }
         }
         throw new Error(`Unknown tool: ${name}`);

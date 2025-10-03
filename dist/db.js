@@ -210,6 +210,35 @@ export class DB {
             await session.close();
         }
     }
+    async searchSnippetByName(input) {
+        const session = this.driver.session();
+        try {
+            const res = await session.run(`
+                MATCH (s:Snippet)-[:HAS_METADATA]->(m:Metadata)
+                WHERE s.name = $name
+                WITH s, collect(DISTINCT m.category) AS categories, collect(DISTINCT m.name) AS metadataNames
+                RETURN {
+                    name: s.name,
+                    content: s.content,
+                    extension: s.extension,
+                    size: s.size,
+                    createdAt: s.createdAt,
+                    category: head(categories),
+                    metadataNames: metadataNames
+                } AS s`, {
+                name: input.name,
+            });
+            if (res.records.length === 0) {
+                throw new Error(`Snippet doesn't exist`);
+            }
+            const s = res.records[0].get('s');
+            const snippet = s;
+            return snippet;
+        }
+        finally {
+            await session.close();
+        }
+    }
     async updateSnippetContent(input) {
         const session = this.driver.session();
         try {
