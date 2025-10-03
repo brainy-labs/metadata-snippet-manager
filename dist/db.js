@@ -1,7 +1,7 @@
 import neo4j from "neo4j-driver";
 import * as dotenv from 'dotenv';
 import * as fs from 'fs/promises';
-import { dirname, join, resolve, basename } from "path";
+import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
@@ -100,8 +100,26 @@ export class DB {
             await session.close();
         }
     }
+    async deleteMetadataByName(input) {
+        const session = this.driver.session();
+        try {
+            const res = await session.run(`UNWIND $names as name MATCH (m:Metadata {name: name}) DETACH DELETE m`, { names: input.names });
+        }
+        finally {
+            await session.close();
+        }
+    }
+    async deleteSnippetsByName(input) {
+        const session = this.driver.session();
+        try {
+            const res = await session.run(`UNWIND $names as name MATCH (s:Snippet {name: name}) DETACH DELETE s`, { names: input.names });
+        }
+        finally {
+            await session.close();
+        }
+    }
     /**
-     * TODO: add category type to quick check metadata
+     * Create a Snippet with the given metadata
      * @param input Snippet to insert
      * @returns the Snippet inserted
      */
@@ -109,7 +127,7 @@ export class DB {
         const session = this.driver.session();
         try {
             // Check if snippet already exists
-            const res = await session.run(` MATCH (s:Snippet) WHERE s.name = $name RETURN s`, { name: input.name });
+            const res = await session.run(`MATCH (s:Snippet) WHERE s.name = $name RETURN s`, { name: input.name });
             if (res.records.length > 0)
                 throw new Error(`Name already taken`);
             // Check metadata existence
@@ -151,12 +169,16 @@ export class DB {
                 const record = result.records[0];
                 const snippet = record.get('s').properties;
                 const createdAt = record.get('createdAt');
+                const content = await fs.readFile(path, "utf-8");
                 return {
                     name: snippet.name,
+                    content: content,
                     path: snippet.path,
                     extension: snippet.extension,
                     size: snippet.size,
-                    createdAt: new Date(createdAt.toString())
+                    createdAt: new Date(createdAt.toString()),
+                    metadataNames: input.metadataNames,
+                    category: input.category
                 };
             }
             catch {
@@ -187,17 +209,31 @@ export class DB {
         }
     }
     /**
-     * Get all snippets from db
+     * Get all snippets from db with metadata
      * @returns an array of all snippets
      */
     async getAllSnippets() {
         const session = this.driver.session();
         try {
-            const res = await session.run(`MATCH (s:Snippet) RETURN s`);
-            const response = res.records.map(record => {
+            const res = await session.run(`
+                MATCH (s:Snippet)-[:HAS_METADATA]->(m:Metadata)
+                WITH s, collect(DISTINCT m.category) AS categories, collect(DISTINCT m.name) AS metadataNames
+                RETURN {
+                    name: s.name,
+                    path: s.path,
+                    extension: s.extension,
+                    size: s.size,
+                    createdAt: s.createdAt,
+                    category: head(categories),
+                    metadataNames: metadataNames
+                } AS s
+            `);
+            const response = await Promise.all(res.records.map(async (record) => {
                 const node = record.get('s');
-                return node.properties;
-            });
+                const content = await fs.readFile(node.path, 'utf-8');
+                const snippet = { ...node, content: content };
+                return snippet;
+            }));
             return response;
         }
         finally {
@@ -272,67 +308,6 @@ export class DB {
         }
         finally {
             await session.close();
-        }
-    }
-    // TODO: remove
-    async test_add_file(name, content) {
-        if (content.length > 500 || name.length > 30)
-            throw new Error("File content of File name tool long");
-        const path = join(storageDir, name);
-        await fs.writeFile(path, content);
-        const session = this.driver.session();
-        try {
-            const result = await session.run(`
-                MERGE (f:File { path: $path })
-                SET f.content = $content
-                RETURN f;
-            `, { path: path, content: content });
-            return basename(result.records[0].get("f").properties.path);
-        }
-        catch (error) {
-            throw new Error(`Error adding file: ${error}`);
-        }
-        finally {
-            session.close();
-        }
-    }
-    // TODO: remove
-    async test_remove_file(name) {
-        const path = join(storageDir, name);
-        const session = this.driver.session();
-        try {
-            const result = await session.run(`
-               MATCH (f: File { path: $path }) 
-               DETACH DELETE f
-            `, { path: path });
-            await fs.unlink(path);
-            return name;
-        }
-        catch (error) {
-            throw new Error(`Error removing file: ${error}`);
-        }
-        finally {
-            session.close();
-        }
-    }
-    // TODO: remove
-    async test_read_file(name) {
-        const path = join(storageDir, name);
-        const session = this.driver.session();
-        try {
-            const result = await session.run(`
-                MATCH (f: File { path: $path})
-                return f
-            `, { path: path });
-            if (result.records.length === 0)
-                return undefined;
-            return result.records[0].get("f").properties.content;
-        }
-        catch (error) {
-            throw new Error(`Error reading file: ${error}`);
-        }
-        finally {
-            session.close();
         }
     }
     /**

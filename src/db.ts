@@ -6,9 +6,11 @@ import { fileURLToPath } from "url";
 import { 
     CreateMetadataInput, 
     CreateSnippetInput, 
+    DeleteMetadataInput, 
+    DeleteSnippetsInput, 
     Metadata, 
     SearchSnippetByNameInput, 
-    Snippet 
+    Snippet, 
 } from "./schemas.js";
 
 dotenv.config();
@@ -123,8 +125,26 @@ export class DB {
         }
     }
 
+    async deleteMetadataByName(input: DeleteMetadataInput): Promise<void> {
+        const session = this.driver.session();
+        try{
+            const res = await session.run(`UNWIND $names as name MATCH (m:Metadata {name: name}) DETACH DELETE m`, { names: input.names});
+        } finally {
+            await session.close();
+        }
+    }
+
+    async deleteSnippetsByName(input: DeleteSnippetsInput): Promise<void>{
+        const session = this.driver.session();
+        try {
+            const res = await session.run(`UNWIND $names as name MATCH (s:Snippet {name: name}) DETACH DELETE s`, { names: input.names});
+        } finally {
+            await session.close();
+        }
+    }
+
     /**
-     * TODO: add category type to quick check metadata
+     * Create a Snippet with the given metadata 
      * @param input Snippet to insert
      * @returns the Snippet inserted
      */
@@ -132,7 +152,7 @@ export class DB {
         const session = this.driver.session();
         try{
             // Check if snippet already exists
-            const res = await session.run(` MATCH (s:Snippet) WHERE s.name = $name RETURN s`, {name: input.name});
+            const res = await session.run(`MATCH (s:Snippet) WHERE s.name = $name RETURN s`, {name: input.name});
             if (res.records.length > 0) throw new Error(`Name already taken`);
 
             // Check metadata existence
@@ -181,12 +201,17 @@ export class DB {
                 const snippet = record.get('s').properties;
                 const createdAt = record.get('createdAt');
 
+                const content = await fs.readFile(path, "utf-8");
+
                 return {
                     name: snippet.name,
+                    content: content,
                     path: snippet.path,
                     extension: snippet.extension,
                     size: snippet.size,
-                    createdAt: new Date(createdAt.toString())
+                    createdAt: new Date(createdAt.toString()),
+                    metadataNames: input.metadataNames,
+                    category: input.category
                 };
             } catch {
                 await fs.unlink(path);
@@ -219,19 +244,35 @@ export class DB {
     }
 
     /**
-     * Get all snippets from db 
+     * Get all snippets from db with metadata
      * @returns an array of all snippets 
      */
     async getAllSnippets(): Promise<Snippet[]> {
         const session = this.driver.session();
         try{
-            const res = await session.run(`MATCH (s:Snippet) RETURN s`);
+            const res = await session.run(`
+                MATCH (s:Snippet)-[:HAS_METADATA]->(m:Metadata)
+                WITH s, collect(DISTINCT m.category) AS categories, collect(DISTINCT m.name) AS metadataNames
+                RETURN {
+                    name: s.name,
+                    path: s.path,
+                    extension: s.extension,
+                    size: s.size,
+                    createdAt: s.createdAt,
+                    category: head(categories),
+                    metadataNames: metadataNames
+                } AS s
+            `);
 
-            const response: Snippet[] = res.records.map(record => {
-                const node = record.get('s');
-                return node.properties as Snippet;
-            });
-
+            const response = await Promise.all(
+                res.records.map(async record => {
+                    const node = record.get('s');
+                    const content = await fs.readFile(node.path, 'utf-8');
+                    const snippet: Snippet = {...node, content: content};
+                    return snippet;
+                })
+            );
+            
             return response;
         } finally {
             await session.close();
@@ -322,62 +363,6 @@ export class DB {
         } finally {
             await session.close();
         }
-    }
-
-    // TODO: remove
-    async test_add_file(name: string, content: string): Promise<string> {
-        if (content.length > 500 || name.length > 30) 
-            throw new Error("File content of File name tool long");
-
-        const path = join(storageDir, name);
-        await fs.writeFile(path, content);
-
-        const session: Session = this.driver.session();
-        try {
-            const result = await session.run(`
-                MERGE (f:File { path: $path })
-                SET f.content = $content
-                RETURN f;
-            `, { path: path, content: content});
-
-            return basename(result.records[0].get("f").properties.path);
-        } 
-        catch (error) { throw new Error(`Error adding file: ${error}`); } 
-        finally { session.close(); }
-    }
-
-    // TODO: remove
-    async test_remove_file(name: string): Promise<string> {
-        const path = join(storageDir, name);
-
-        const session: Session = this.driver.session();
-        try {
-            const result = await session.run(`
-               MATCH (f: File { path: $path }) 
-               DETACH DELETE f
-            `, { path: path });
-            await fs.unlink(path);
-            return name;
-        }
-        catch (error) { throw new Error(`Error removing file: ${error}`); } 
-        finally { session.close(); }
-    }
-
-    // TODO: remove
-    async test_read_file(name: string): Promise<string | undefined> {
-        const path = join(storageDir, name);
-
-        const session: Session = this.driver.session();
-        try {
-            const result = await session.run(`
-                MATCH (f: File { path: $path})
-                return f
-            `, { path: path });
-            if (result.records.length === 0) return undefined;
-            return result.records[0].get("f").properties.content;
-        }
-        catch (error) { throw new Error(`Error reading file: ${error}`); } 
-        finally { session.close() }
     }
 
     /**
