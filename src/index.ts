@@ -4,7 +4,8 @@ import {
     CreateSnippetInput, 
     CreateSnippetSchema,
     DeleteMetadataSchema,
-    DeleteSnippetsSchema
+    DeleteSnippetsSchema,
+    updateSnippetContentSchema
 } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { 
@@ -36,7 +37,8 @@ enum ToolName {
     CREATE_METADATA = "create_metadata",
     CREATE_SNIPPET = "create_snippet",
     DELETE_METADATA = "delete_metadata",
-    DELETE_SNIPPETS = "delete_snippets"
+    DELETE_SNIPPETS = "delete_snippets",
+    UPDATE_SNIPPET_CONTENT = "update_snippet_content"
 };
 
 const db: DB = (() => {
@@ -104,6 +106,11 @@ export const createServer = () => {
                 name: ToolName.DELETE_SNIPPETS,
                 description: "Delete snippets",
                 inputSchema: zodToJsonSchema(DeleteSnippetsSchema) as ToolInput
+            },
+            {
+                name: ToolName.UPDATE_SNIPPET_CONTENT,
+                description: "Update snippet content",
+                inputSchema: zodToJsonSchema(updateSnippetContentSchema) as ToolInput
             }
         ];
 
@@ -202,8 +209,18 @@ export const createServer = () => {
                 await db.deleteSnippetsByName(names);
                 return { content: [ { type: "text", text: JSON.stringify({ success: true, content: "Snippets deleted" } ) } ] }
             } catch (error) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error || 'Failed to delete snippets' } ) } ] }
+                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: "Failed to delete snippets" } ) } ] }
             }
+        }
+
+        if (name === ToolName.UPDATE_SNIPPET_CONTENT) {
+            const validatedArgs = updateSnippetContentSchema.parse(args);
+            try {
+                const res = await db.updateSnippetContent(validatedArgs);
+                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res}) } ] }
+            } catch (error: any) {
+                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: error.message }) } ] }
+           }
         }
 
         throw new Error(`Unknown tool: ${name}`);

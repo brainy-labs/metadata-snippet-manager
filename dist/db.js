@@ -34,7 +34,6 @@ export class DB {
         const session = this.driver.session();
         try {
             await this.create_field_constraint(session, "Snippet", "snippet_path_unique", "path", ConstraintType.UNIQUE);
-            await this.create_field_constraint(session, "Snippet", "snippet_name_unique", "name", ConstraintType.UNIQUE);
             await this.create_field_constraint(session, "Metadata", "metadata_name_existence", "name", ConstraintType.EXISTS);
             await this.create_field_constraint(session, "Metadata", "metadata_name_unique", "name", ConstraintType.UNIQUE);
             await this.create_index(session, "Metadata", "metadata_category", "category");
@@ -111,8 +110,11 @@ export class DB {
     }
     async deleteSnippetsByName(input) {
         const session = this.driver.session();
+        const paths = input.nameExts.map((nameExt) => {
+            return join(storageDir, nameExt);
+        });
         try {
-            const res = await session.run(`UNWIND $names as name MATCH (s:Snippet {name: name}) DETACH DELETE s`, { names: input.names });
+            const res = await session.run(`UNWIND $paths as path MATCH (s:Snippet {path: path}) DETACH DELETE s`, { paths: paths });
         }
         finally {
             await session.close();
@@ -235,6 +237,38 @@ export class DB {
                 return snippet;
             }));
             return response;
+        }
+        finally {
+            await session.close();
+        }
+    }
+    async updateSnippetContent(input) {
+        const path = join(storageDir, `${input.name}.${input.extension}`);
+        try {
+            await fs.access(path, fs.constants.F_OK);
+        }
+        catch {
+            throw new Error(`File doesn't exists`);
+        }
+        await fs.writeFile(path, input.content);
+        const session = this.driver.session();
+        try {
+            const res = await session.run(`
+                MATCH (s:Snippet)-[:HAS_METADATA]->(m:Metadata)
+                WHERE s.path = $path
+                WITH s, collect(DISTINCT m.category) AS categories, collect(DISTINCT m.name) AS metadataNames
+                RETURN {
+                    name: s.name,
+                    path: s.path,
+                    extension: s.extension,
+                    size: s.size,
+                    createdAt: s.createdAt,
+                    category: head(categories),
+                    metadataNames: metadataNames
+                } AS s`, { path: path });
+            const s = res.records[0].get('s');
+            const snippet = { ...s, content: input.content };
+            return snippet;
         }
         finally {
             await session.close();

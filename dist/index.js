@@ -1,5 +1,5 @@
 import { DB } from "./db.js";
-import { CreateMetadataSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema } from "./schemas.js";
+import { CreateMetadataSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, updateSnippetContentSchema } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema, ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -23,6 +23,7 @@ var ToolName;
     ToolName["CREATE_SNIPPET"] = "create_snippet";
     ToolName["DELETE_METADATA"] = "delete_metadata";
     ToolName["DELETE_SNIPPETS"] = "delete_snippets";
+    ToolName["UPDATE_SNIPPET_CONTENT"] = "update_snippet_content";
 })(ToolName || (ToolName = {}));
 ;
 const db = (() => {
@@ -86,6 +87,11 @@ export const createServer = () => {
                 name: ToolName.DELETE_SNIPPETS,
                 description: "Delete snippets",
                 inputSchema: zodToJsonSchema(DeleteSnippetsSchema)
+            },
+            {
+                name: ToolName.UPDATE_SNIPPET_CONTENT,
+                description: "Update snippet content",
+                inputSchema: zodToJsonSchema(updateSnippetContentSchema)
             }
         ];
         return { tools };
@@ -183,7 +189,17 @@ export const createServer = () => {
                 return { content: [{ type: "text", text: JSON.stringify({ success: true, content: "Snippets deleted" }) }] };
             }
             catch (error) {
-                return { content: [{ type: "text", text: JSON.stringify({ success: false, content: error || 'Failed to delete snippets' }) }] };
+                return { content: [{ type: "text", text: JSON.stringify({ success: false, content: "Failed to delete snippets" }) }] };
+            }
+        }
+        if (name === ToolName.UPDATE_SNIPPET_CONTENT) {
+            const validatedArgs = updateSnippetContentSchema.parse(args);
+            try {
+                const res = await db.updateSnippetContent(validatedArgs);
+                return { content: [{ type: "text", text: JSON.stringify({ success: true, content: res }) }] };
+            }
+            catch (error) {
+                return { content: [{ type: "text", text: JSON.stringify({ success: true, content: error.message }) }] };
             }
         }
         throw new Error(`Unknown tool: ${name}`);

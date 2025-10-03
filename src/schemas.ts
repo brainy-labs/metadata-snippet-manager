@@ -46,9 +46,16 @@ export const DeleteMetadataSchema = z.object({
 export type DeleteMetadataInput = z.infer<typeof DeleteMetadataSchema>;
 
 export const DeleteSnippetsSchema = z.object({
-    names: z.array(z.string().min(1).max(255))
+    nameExts: z.array(z.string().regex(/\.[a-zA-Z0-9]{1,10}$/))
 });
 export type DeleteSnippetsInput = z.infer<typeof DeleteSnippetsSchema>;
+
+export const updateSnippetContentSchema = z.object({
+    name: z.string().min(1).max(255),
+    extension: z.string().min(1).max(10),
+    content: z.string()
+});
+export type upDateSnippetContentInput = z.infer<typeof updateSnippetContentSchema>;
 
 export const SearchSnippetByNameSchema = z.object({
     name: z.string().min(1).max(255)
