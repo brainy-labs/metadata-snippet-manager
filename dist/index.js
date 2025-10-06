@@ -66,7 +66,7 @@ export const createServer = () => {
             },
             {
                 name: ToolName.CREATE_SNIPPET,
-                description: "Create a snippet with metadata",
+                description: "Create a snippet with metadata, all metadata have the same category",
                 inputSchema: zodToJsonSchema(CreateSnippetSchema)
             },
             {
