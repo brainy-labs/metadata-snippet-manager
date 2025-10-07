@@ -7,6 +7,9 @@ async function run() {
             case 'stdio':
                 await import('./stdio.js');
                 break;
+            case 'http':
+                await import ('./streamableHttp.js');
+                break;
             default: 
                 console.error(`Unknown script: ${scriptName}`);
                 console.log('Available scripts:');
