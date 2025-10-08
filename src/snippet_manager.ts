@@ -11,7 +11,10 @@ import {
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { 
     CallToolRequestSchema,
+    ListResourcesRequestSchema,
+    ListResourceTemplatesRequestSchema,
     ListToolsRequestSchema, 
+    ReadResourceRequestSchema, 
     Tool, 
     ToolSchema 
 } from "@modelcontextprotocol/sdk/types.js";
@@ -51,11 +54,64 @@ export const createServer = (db: DB) => {
         },
         {
             capabilities: {
-                tools: {}
+                tools: {},
+                resources: {
+                    list: true,
+                    read: true
+                }
             },
             instructions,
         }
     );
+
+    server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    return {
+            resources: [
+                {
+                    uri: "metadata://all",
+                    name: "All Metadata",
+                    description: "List of all metadata"
+                },
+                {
+                    uri: "snippets://all",
+                    name: "All Snippets",
+                    description: "List of all snippets"
+                }
+            ]
+        };
+    });
+
+    server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+        const uri = request.params.uri;
+
+        if (uri === "metadata://all") {
+            const res = await db.getAllMetadata();
+            return {
+                contents: [
+                    {
+                        uri: uri,  
+                        mimeType: "application/json",
+                        text: JSON.stringify(res, null, 2)
+                    }
+                ]
+            };
+        }
+
+        if (uri === "snippets://all") {
+            const res = await db.getAllSnippets();
+            return {
+                contents: [
+                    {
+                        uri: uri,
+                        mimeType: "application/json",
+                        text: JSON.stringify(res, null, 2)
+                    }
+                ]
+            };
+        }
+
+        throw new Error(`Unknown resource: ${uri}`);
+    });
 
     server.setRequestHandler(ListToolsRequestSchema, async () => {
         const tools: Tool[] = [

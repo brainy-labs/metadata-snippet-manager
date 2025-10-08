@@ -1,6 +1,6 @@
 import { CreateMetadataSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { CallToolRequestSchema, ListToolsRequestSchema, ToolSchema } from "@modelcontextprotocol/sdk/types.js";
+import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { fileURLToPath } from "url";
@@ -32,9 +32,57 @@ export const createServer = (db) => {
         version: "0.1.0",
     }, {
         capabilities: {
-            tools: {}
+            tools: {},
+            resources: {
+                list: true,
+                read: true
+            }
         },
         instructions,
+    });
+    server.setRequestHandler(ListResourcesRequestSchema, async () => {
+        return {
+            resources: [
+                {
+                    uri: "metadata://all",
+                    name: "All Metadata",
+                    description: "List of all metadata"
+                },
+                {
+                    uri: "snippets://all",
+                    name: "All Snippets",
+                    description: "List of all snippets"
+                }
+            ]
+        };
+    });
+    server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+        const uri = request.params.uri;
+        if (uri === "metadata://all") {
+            const res = await db.getAllMetadata();
+            return {
+                contents: [
+                    {
+                        uri: uri,
+                        mimeType: "application/json",
+                        text: JSON.stringify(res, null, 2)
+                    }
+                ]
+            };
+        }
+        if (uri === "snippets://all") {
+            const res = await db.getAllSnippets();
+            return {
+                contents: [
+                    {
+                        uri: uri,
+                        mimeType: "application/json",
+                        text: JSON.stringify(res, null, 2)
+                    }
+                ]
+            };
+        }
+        throw new Error(`Unknown resource: ${uri}`);
     });
     server.setRequestHandler(ListToolsRequestSchema, async () => {
         const tools = [
