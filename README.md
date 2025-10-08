@@ -1,115 +1,139 @@
+
 # MSM (Metadata Snippet Manager)
 
 A snippet manager based on a metadata system.
 
-## License
+---
 
-This project is distributed under the MIT License. See the file [LICENSE](./LICENSE) for details.
+## Table of Contents
 
-## Setup
-
-Follow these steps to set up and run the MCP Server project locally.
+- [MSM (Metadata Snippet Manager)](#msm-metadata-snippet-manager)
+  - [Table of Contents](#table-of-contents)
+  - [License](#license)
+  - [Overview](#overview)
+  - [Environment variables](#environment-variables)
+  - [Quick start — Local (DB in Docker, app local)](#quick-start--local-db-in-docker-app-local)
+  - [Quick start — Full Docker (DB + app in Docker)](#quick-start--full-docker-db--app-in-docker)
 
 ---
 
-### 1. Environment Variables
+## License
 
-Create a `.env` file in the project root with the following content:
+This project is distributed under the **MIT License**. See the `LICENSE` file for details.
 
-```
+---
+
+## Overview
+
+MSM can be run in two main ways:
+
+* **Local development**: Neo4j runs in Docker (using `docker-compose.local.yml`) while the application runs on your host machine. This is the recommended flow for development and debugging.
+* **Full Docker**: both Neo4j and the application run inside Docker containers (using `docker-compose.yml`). This is useful for deployment or when you want everything inside Docker.
+
+When the app runs inside Docker (full compose), it automatically runs in `http` mode. When running locally, you can choose `http` or `stdio` when launching `dist/index.js`.
+
+---
+
+## Environment variables
+
+Create a `.env` file in the project root with Neo4j credentials and the server port. Example:
+
+```env
 # Neo4j Configuration
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=password
 
-# Local Neo4j connection (outside Docker)
+# Local use (when DB runs on the host)
 NEO4J_URI=bolt://localhost:7687
+
+# Docker use (when app runs inside Docker)
+# NEO4J_URI=bolt://neo4j:7687
 
 # Server Configuration
 PORT=3002
 ```
 
-> **Note:** When running locally (not in Docker), `NEO4J_URI` must point to `localhost`.
+**Important:**
+
+* If you run the app locally against a DB on your machine, use `NEO4J_URI=bolt://localhost:7687` and comment out the Docker hostname line.
+* If you run the full Docker Compose stack (app inside Docker), use `NEO4J_URI=bolt://neo4j:7687` so the app container can reach the Neo4j container by its Docker service name.
 
 ---
 
-### 2. Start the Neo4j Database
+## Quick start — Local (DB in Docker, app local)
 
-The project uses Neo4j as a graph database. To start it in Docker:
+1. Clone the repository:
 
 ```bash
-docker compose up -d
+git clone <repo-url>
+cd <repo-dir>
 ```
 
-* This will start Neo4j in the background.
-* Neo4j Browser will be available at [http://localhost:7474](http://localhost:7474)
-* Bolt protocol for the driver runs on port `7687`.
+2. Start **only** the Neo4j database in Docker (runs in background):
 
-> **Note:** Make sure these ports are free before starting.
-> If Neo4j does not start, check logs with:
->
-> ```bash
-> docker logs -f neo4j
-> ```
+```bash
+docker compose -f docker-compose.local.yml up -d
+```
 
----
-
-### 3. Install Dependencies
-
-Install the Node.js dependencies:
+3. Install dependencies and build the project (if not already built):
 
 ```bash
 npm install
-```
-
----
-
-### 4. Build the Project
-
-Compile the TypeScript source code and prepare the executable:
-
-```bash
 npm run build
 ```
 
-This will:
-
-* Compile TypeScript files into the `dist/` directory
-* Copy additional files (e.g., `instructions.md`)
-* Prepare the runtime build
-
----
-
-### 5. Start the Application
-
-Once Neo4j is running and the project is built, start the application with:
+4. Run the application locally (from project root):
 
 ```bash
-node dist/index.js [stdio|http]
-```
-
-Available modes:
-
-* `stdio` — runs the server in standard I/O mode (for integration or CLI use)
-* `http` — starts the HTTP server on the configured port (default: `3002`)
-
-Example:
-
-```bash
+# HTTP server mode (server listens on PORT from .env)
 node dist/index.js http
+
+# or stdio mode (CLI / integration)
+node dist/index.js stdio
+```
+
+**To stop:**
+
+* Stop the **local application** with `Ctrl+C` in the terminal running `node dist/index.js`.
+* Stop and remove the **database** container with:
+
+```bash
+docker compose -f docker-compose.local.yml down
 ```
 
 ---
 
-### 6. Optional: Stop the Database
+## Quick start — Full Docker (DB + app in Docker)
 
-To stop the Neo4j Docker container:
+1. Clone the repository:
+
+```bash
+git clone <repo-url>
+cd <repo-dir>
+```
+
+2. Ensure your `.env` uses `bolt://neo4j:7687` for `NEO4J_URI` (uncomment the Docker line and comment the localhost line).
+
+3. Build images and start services (DB + app):
+
+```bash
+# build (the image build runs the project build inside the image)
+docker compose build
+
+# start services in background
+docker compose up -d
+```
+
+The app will run in `http` mode inside Docker and be exposed on the port defined in `.env`.
+
+**To stop everything (app + DB):**
 
 ```bash
 docker compose down
 ```
 
-To remove all data (reset the database):
+This will stop and remove the containers started by `docker-compose.yml`.
 
-```bash
-docker compose down -v
-```
+---
+
+If you want, I can export this document as a `README.md` file ready to download or apply additional edits (badges, security notes, example `.env` with safer defaults, or CI instructions). Tell me which format you prefer.
