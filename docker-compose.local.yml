@@ -1,0 +1,15 @@
+services:
+  neo4j:
+    image: neo4j:5
+    container_name: neo4j
+    ports:
+      - "7474:7474" # Neo4j Browser (HTTP)
+      - "7687:7687" # Bolt (driver)
+    environment:
+      NEO4J_AUTH: "${NEO4J_USER}/${NEO4J_PASSWORD}" 
+    volumes:
+      - ./data:/data   # data persistence 
+      - ./logs:/logs   # logs
+      - ./import:/import # any CSV of file import
+      - ./plugins:/plugins # any plugins
+    restart: unless-stopped
