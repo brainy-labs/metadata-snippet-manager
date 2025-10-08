@@ -3,20 +3,19 @@
 # -----------------------------
 FROM node:20-bullseye AS builder
 
-# Imposta la working directory
 WORKDIR /app
 
-# Copia solo i file di dipendenze
-COPY package*.json ./
+# Copia i file di configurazione e dipendenze
+COPY package*.json tsconfig.json ./
 
-# Installa le dipendenze SENZA eseguire gli script di ciclo di vita (es. "prepare")
-# Questa è la modifica chiave per risolvere l'errore "tsc: not found"
-RUN npm install --ignore-scripts
+# Installa le dipendenze SENZA eseguire gli script (prepare)
+RUN npm ci --ignore-scripts
 
-# Copia tutto il codice sorgente (incluso tsconfig.json e la cartella src)
-COPY . .
+# Copia il codice sorgente
+COPY src ./src
+COPY instructions.md ./
 
-# Ora che il codice è presente, esegui il build
+# Ora esegui il build manualmente
 RUN npm run build
 
 # -----------------------------
@@ -24,17 +23,15 @@ RUN npm run build
 # -----------------------------
 FROM node:20-slim AS runtime
 
-# Imposta la working directory
 WORKDIR /app
 
-# Copia solo le parti necessarie dal builder
+# Copia i file necessari dal builder
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package*.json ./
-# AGGIUNGI QUESTA RIGA per copiare instructions.md dove il codice lo cerca
-COPY --from=builder /app/instructions.md /app/instructions.md
+COPY --from=builder /app/instructions.md ./instructions.md
 
 # Installa solo le dipendenze di produzione
-RUN npm install --omit=dev --ignore-scripts
+RUN npm ci --omit=dev --ignore-scripts
 
 # Espone la porta
 EXPOSE 3002
