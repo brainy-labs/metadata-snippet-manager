@@ -133,7 +133,3 @@ docker compose down
 ```
 
 This will stop and remove the containers started by `docker-compose.yml`.
-
----
-
-If you want, I can export this document as a `README.md` file ready to download or apply additional edits (badges, security notes, example `.env` with safer defaults, or CI instructions). Tell me which format you prefer.
