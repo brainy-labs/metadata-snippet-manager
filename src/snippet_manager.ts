@@ -1,7 +1,6 @@
 import { DB } from "./db.js";
 import { 
     CreateMetadataSchema, 
-    CreateSnippetInput, 
     CreateSnippetSchema,
     DeleteMetadataSchema,
     DeleteSnippetsSchema,
@@ -12,7 +11,6 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { 
     CallToolRequestSchema,
     ListResourcesRequestSchema,
-    ListResourceTemplatesRequestSchema,
     ListToolsRequestSchema, 
     ReadResourceRequestSchema, 
     Tool, 
