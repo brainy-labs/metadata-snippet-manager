@@ -1,9 +1,11 @@
 import { DB } from "./db.js";
 import { 
     CreateMetadataSchema, 
+    CreateMetadataTreeSchema, 
     CreateSnippetSchema,
     DeleteMetadataSchema,
     DeleteSnippetsSchema,
+    GetMetadataTreeSchema,
     SearchSnippetByNameSchema,
     UpdateSnippetContentSchema
 } from "./schemas.js";
@@ -40,7 +42,9 @@ enum ToolName {
     DELETE_METADATA = "delete_metadata",
     DELETE_SNIPPETS = "delete_snippets",
     UPDATE_SNIPPET_CONTENT = "update_snippet_content",
-    SEARCH_SNIPPET_BY_NAME = "search_snippet_by_name"
+    SEARCH_SNIPPET_BY_NAME = "search_snippet_by_name",
+    GET_METADATA_TREE = "get_metadata_tree",
+    CREATE_METADATA_TREE = "create_metadata_tree"
 };
 
 export const createServer = (db: DB) => {
@@ -162,6 +166,16 @@ export const createServer = (db: DB) => {
                 name: ToolName.SEARCH_SNIPPET_BY_NAME,
                 description: "Get snippet searching by name",
                 inputSchema: zodToJsonSchema(SearchSnippetByNameSchema) as ToolInput
+            },
+            {
+                name: ToolName.GET_METADATA_TREE,
+                description: "Get a metadata tree by the root name",
+                inputSchema: zodToJsonSchema(GetMetadataTreeSchema) as ToolInput
+            },
+            {
+                name: ToolName.CREATE_METADATA_TREE,
+                description: "Create a metadata tree",
+                inputSchema: zodToJsonSchema(CreateMetadataTreeSchema) as ToolInput
             }
         ];
 
@@ -272,6 +286,26 @@ export const createServer = (db: DB) => {
                 return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }) } ] };
             } catch (error: any) {
                 return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to search snippet"}) } ] };
+            }
+        }
+
+        if (name === ToolName.GET_METADATA_TREE) {
+            const validatedArgs = GetMetadataTreeSchema.parse(args);
+            try {
+                const res = await db.getMetadataTree(validatedArgs);
+                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }) } ] };
+            } catch (error: any) {
+                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to get metadata tree"}) } ] };
+            }
+        }
+
+        if (name === ToolName.CREATE_METADATA_TREE) {
+            const validatedArgs = CreateMetadataTreeSchema.parse(args);
+            try {
+                const res = await db.createMetadataTree(validatedArgs);
+                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }) } ] };
+            } catch (error: any) {
+                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to create metadata tree"}) } ] };
             }
         }
 

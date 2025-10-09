@@ -71,3 +71,20 @@ export const SearchSnippetByNameSchema = z.object({
     name: z.string().min(1).max(255).toLowerCase()
 });
 export type SearchSnippetByNameInput = z.infer<typeof SearchSnippetByNameSchema>;
+
+export const MetadataTreeNodeSchema: z.ZodType = z.object({
+    name: z.string().min(1).max(100).toLowerCase(),
+    children: z.lazy(() => z.array(MetadataTreeNodeSchema)).default([])
+});
+export type MetadataTreeNode = z.infer<typeof MetadataTreeNodeSchema>;
+
+export const GetMetadataTreeSchema = z.object({
+    name: z.string().min(1).max(100).toLowerCase()
+});
+export type GetMetadataTreeInput = z.infer<typeof GetMetadataTreeSchema>;
+
+export const CreateMetadataTreeSchema = z.object({
+    category: z.nativeEnum(MetadataCategory),
+    root: MetadataTreeNodeSchema
+});
+export type CreateMetadataTreeInput = z.infer<typeof CreateMetadataTreeSchema>;

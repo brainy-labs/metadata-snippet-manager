@@ -2,10 +2,13 @@ import neo4j, { Driver, Session } from "neo4j-driver";
 import * as dotenv from 'dotenv';
 import { 
     CreateMetadataInput, 
+    CreateMetadataTreeInput, 
     CreateSnippetInput, 
     DeleteMetadataInput, 
     DeleteSnippetsInput, 
+    GetMetadataTreeInput,
     Metadata, 
+    MetadataTreeNode,
     SearchSnippetByNameInput, 
     Snippet,
     upDateSnippetContentInput, 
@@ -306,6 +309,119 @@ export class DB {
             const s = res.records[0].get('s');
             const snippet: Snippet = s;
             return snippet;
+        } finally {
+            await session.close();
+        }
+    }
+
+    async getMetadataTree(input: GetMetadataTreeInput): Promise<MetadataTreeNode> {
+        const session = this.driver.session();
+        try{
+            const rootCheck = await session.run(`
+                MATCH (m:Metadata {name: $name})
+                RETURN m.category as category
+            `, { name: input.name });
+
+            if (rootCheck.records.length === 0) {
+                throw new Error(`Metadata '${input.name}' not found`);
+            }
+
+            const category = rootCheck.records[0].get('category');
+
+            const result = await session.run(`
+                MATCH path = (root:Metadata {name: $name})-[:PARENT_OF*0..]->(descendant:Metadata)
+                WITH root, descendant,
+                    [rel in relationships(path) | rel] as rels,
+                    length(path) as depth
+                ORDER BY depth
+                WITH collect({
+                    name: descendant.name,
+                    depth: depth,
+                    parentName: CASE
+                        WHEN depth > 0
+                        THEN [rel in rels | startNode(rel).name][-1]
+                        ELSE null
+                    END
+                }) as nodes
+                RETURN nodes
+            `, { name: input.name });
+
+            const nodes = result.records[0].get('nodes');
+
+            const nodeMap = new Map<string, MetadataTreeNode>();
+
+            nodes.forEach((node: any) => {
+                nodeMap.set(node.name, {
+                    name: node.name,
+                    children: []
+                });
+            });
+
+            let root: MetadataTreeNode | null = null;
+            nodes.forEach((node: any) => {
+                const currentNode = nodeMap.get(node.name)!;
+
+                if (node.parentName === null) {
+                    root = currentNode;
+                } else {
+                    const parent = nodeMap.get(node.parentName);
+                    if (parent) {
+                        parent.children.push(currentNode);
+                    }
+                }
+            });
+
+            if (!root) {
+                throw new Error(`Failed to build tree structure`);
+            }
+            
+            return {
+                category: category,
+                root: root
+            };
+        } finally {
+            await session.close();
+        }
+    }
+
+    async createMetadataTree(input: CreateMetadataTreeInput): Promise<MetadataTreeNode> {
+        const session = this.driver.session();
+        try {
+            const rootCheck = await session.run(`
+                MATCH (m:Metadata {name: $name})
+                RETURN m
+            `, { name: input.root.name });
+
+            if (rootCheck.records.length > 0) {
+                throw new Error(`Root metadata '${input.root.name}' already exists`);
+            }
+
+            type treeNode = { name: string;  parentName: string | null };
+
+            const flatNodes: Array<treeNode> = [];
+
+            const flatten = (node: MetadataTreeNode, parentName: string | null = null) => {
+                flatNodes.push({
+                    name: node.name,
+                    parentName: parentName
+                });
+
+                node.children.forEach((child: treeNode) => flatten(child, node.name));
+            };
+
+            flatten(input.root);
+
+            await session.run(`
+                UNWIND $nodes as node
+                MERGE (m:Metadata {name: node.name, category: $category})
+                WITH m, node
+                WHERE node.parentName IS NOT NULL
+                MATCH (p:Metadata {name: node.parentName})
+                MERGE (p)-[:PARENT_OF]->(m)
+            `, { 
+                nodes: flatNodes,
+                category: input.category, 
+             });
         } finally {
             await session.close();
         }

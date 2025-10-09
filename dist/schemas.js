@@ -49,3 +49,14 @@ export const UpdateSnippetContentSchema = z.object({
 export const SearchSnippetByNameSchema = z.object({
     name: z.string().min(1).max(255).toLowerCase()
 });
+export const MetadataTreeNodeSchema = z.object({
+    name: z.string().min(1).max(100).toLowerCase(),
+    children: z.lazy(() => z.array(MetadataTreeNodeSchema)).default([])
+});
+export const GetMetadataTreeSchema = z.object({
+    name: z.string().min(1).max(100).toLowerCase()
+});
+export const CreateMetadataTreeSchema = z.object({
+    category: z.nativeEnum(MetadataCategory),
+    root: MetadataTreeNodeSchema
+});

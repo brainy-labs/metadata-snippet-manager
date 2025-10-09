@@ -1,4 +1,4 @@
-import { CreateMetadataSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
+import { CreateMetadataSchema, CreateMetadataTreeSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, GetMetadataTreeSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -23,6 +23,8 @@ var ToolName;
     ToolName["DELETE_SNIPPETS"] = "delete_snippets";
     ToolName["UPDATE_SNIPPET_CONTENT"] = "update_snippet_content";
     ToolName["SEARCH_SNIPPET_BY_NAME"] = "search_snippet_by_name";
+    ToolName["GET_METADATA_TREE"] = "get_metadata_tree";
+    ToolName["CREATE_METADATA_TREE"] = "create_metadata_tree";
 })(ToolName || (ToolName = {}));
 ;
 export const createServer = (db) => {
@@ -135,6 +137,16 @@ export const createServer = (db) => {
                 name: ToolName.SEARCH_SNIPPET_BY_NAME,
                 description: "Get snippet searching by name",
                 inputSchema: zodToJsonSchema(SearchSnippetByNameSchema)
+            },
+            {
+                name: ToolName.GET_METADATA_TREE,
+                description: "Get a metadata tree by the root name",
+                inputSchema: zodToJsonSchema(GetMetadataTreeSchema)
+            },
+            {
+                name: ToolName.CREATE_METADATA_TREE,
+                description: "Create a metadata tree",
+                inputSchema: zodToJsonSchema(CreateMetadataTreeSchema)
             }
         ];
         return { tools };
@@ -244,6 +256,26 @@ export const createServer = (db) => {
             }
             catch (error) {
                 return { content: [{ type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to search snippet" }) }] };
+            }
+        }
+        if (name === ToolName.GET_METADATA_TREE) {
+            const validatedArgs = GetMetadataTreeSchema.parse(args);
+            try {
+                const res = await db.getMetadataTree(validatedArgs);
+                return { content: [{ type: "text", text: JSON.stringify({ success: true, content: res }) }] };
+            }
+            catch (error) {
+                return { content: [{ type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to get metadata tree" }) }] };
+            }
+        }
+        if (name === ToolName.CREATE_METADATA_TREE) {
+            const validatedArgs = CreateMetadataTreeSchema.parse(args);
+            try {
+                const res = await db.createMetadataTree(validatedArgs);
+                return { content: [{ type: "text", text: JSON.stringify({ success: true, content: res }) }] };
+            }
+            catch (error) {
+                return { content: [{ type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to create metadata tree" }) }] };
             }
         }
         throw new Error(`Unknown tool: ${name}`);
