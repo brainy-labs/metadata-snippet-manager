@@ -2,6 +2,7 @@ import neo4j, { Driver, Session } from "neo4j-driver";
 import * as dotenv from 'dotenv';
 import { 
     CreateMetadataInput, 
+    CreateMetadataSubtreeInput, 
     CreateMetadataTreeInput, 
     CreateSnippetInput, 
     DeleteMetadataInput, 
@@ -15,11 +16,6 @@ import {
 } from "./schemas.js";
 
 dotenv.config();
-
-enum ConstraintType{
-    EXISTS = "IS NOT NULL",
-    UNIQUE = "IS UNIQUE"
-};
 
 export class DB {
     private driver: Driver;
@@ -41,6 +37,8 @@ export class DB {
                 connectionAcquisitionTimeout: 20000
             }
         );
+
+        this.initialize();
     }
 
     /**
@@ -49,10 +47,8 @@ export class DB {
     async initialize(): Promise<void> {
         const session = this.driver.session();
         try {
-            await this.create_field_constraint(session, "Snippet", "snippet_name_unique", "name", ConstraintType.UNIQUE);
-            await this.create_field_constraint(session, "Metadata", "metadata_name_existence", "name", ConstraintType.EXISTS);
-            await this.create_field_constraint(session, "Metadata", "metadata_name_unique", "name", ConstraintType.UNIQUE);
-            
+            await this.create_field_constraint(session, "Snippet", "snippet_name_unique", "name");
+            await this.create_field_constraint(session, "Metadata", "metadata_name_unique", "name");
             await this.create_index(session, "Metadata", "metadata_category", "category");
         } finally {
             await session.close();
@@ -411,6 +407,23 @@ export class DB {
 
             flatten(input.root);
 
+            const names = flatNodes.map(n => n.name);
+            const uniqueNames = new Set(names);
+            if (names.length !== uniqueNames.size) {
+                throw new Error('Duplicate names found in subtree');
+            }
+
+            const existingCheck = await session.run(`
+                MATCH (m:Metadata)
+                WHERE m.name IN $names
+                RETURN m.name as name
+            `, { names: names });
+
+            if (existingCheck.records.length > 0) {
+                const existing = existingCheck.records.map(r => r.get('name'));
+                throw new Error(`Some metadata already exists: ${existing.join(', ')}`);
+            }
+
             await session.run(`
                 UNWIND $nodes as node
                 MERGE (m:Metadata {name: node.name, category: $category})
@@ -421,7 +434,81 @@ export class DB {
             `, { 
                 nodes: flatNodes,
                 category: input.category, 
-             });
+            });
+
+            return {
+                category: input.category,
+                root: input.root
+            }
+        } finally {
+            await session.close();
+        }
+    }
+
+    async createMetadataSubtree(input: CreateMetadataSubtreeInput): Promise<{
+        rootName: string;
+        category: string;
+        childrenCount: number
+    }> {
+        const session = this.driver.session();
+        try {
+            const rootCheck = await session.run(`
+                MATCH (m:Metadata {name: $rootName})
+                RETURN m.category as category
+            `, { rootName: input.rootName });
+
+            if (rootCheck.records.length === 0) {
+                throw new Error(`Root metadata '${input.rootName}' not found`);
+            }
+
+            const category = rootCheck.records[0].get('category');
+
+            const flatNodes: Array<{ name: string; parentName: string }> = [];
+
+            const flatten = (node: MetadataTreeNode, parentName: string) => {
+                flatNodes.push({
+                    name: node.name,
+                    parentName: parentName
+                });
+
+                node.children.forEach((child: MetadataTreeNode) => flatten(child, node.name));
+            };
+
+            input.children.forEach(child => flatten(child, input.rootName));
+
+            const names = flatNodes.map(n => n.name);
+            const uniqueNames = new Set(names);
+            if (names.length !== uniqueNames.size) {
+                throw new Error('Duplicate names found in subtree');
+            }
+
+            const existingCheck = await session.run(`
+                MATCH (m:Metadata)
+                WHERE m.name IN $names
+                RETURN m.name as name
+            `, { names: names });
+
+            if (existingCheck.records.length > 0) {
+                const existing = existingCheck.records.map(r => r.get('name'));
+                throw new Error(`Some metadata already exists: ${existing.join(', ')}`);
+            }
+
+            await session.run(`
+                UNWIND $nodes as node
+                CREATE (m:Metadata {name: node.name, category: $category})
+                WITH m, node
+                MATCH (p:Metadata {name: node.parentName})
+                MERGE (p)-[:PARENT_OF]->(m)
+            `, {
+               nodes: flatNodes,
+               category: category 
+            });
+
+            return {
+                rootName: input.rootName,
+                category: category,
+                childrenCount: flatNodes.length
+            }
         } finally {
             await session.close();
         }
@@ -433,8 +520,21 @@ export class DB {
     async clear(): Promise<void> {
         const session: Session = this.driver.session()
         try{
-            // clean db
             await session.run("MATCH (n) DETACH DELETE n");
+
+            const constraints = await session.run("SHOW CONSTRAINTS");
+            for (const record of constraints.records) {
+                const name = record.get("name");
+                await session.run(`DROP CONSTRAINT ${name} IF EXISTS`);
+            }
+
+            const indexes = await session.run("SHOW INDEXES");
+            for (const record of indexes.records) {
+                const name = record.get("name");
+                await session.run(`DROP INDEX ${name} IF EXISTS`);
+            }
+
+            console.log("Database cleared: nodes, relationships, constraints and indexes removed."); 
         } finally{
             await session.close();
         }
@@ -459,12 +559,11 @@ export class DB {
         session: Session, 
         label: string, 
         constraint_name: string, 
-        field: string,
-        type: ConstraintType
+        field: string
     ): Promise<void> {
         await session.run(`
             CREATE CONSTRAINT ${constraint_name} IF NOT EXISTS
-            FOR (${label[0].toLowerCase}:${label}) REQUIRE ${label[0].toLowerCase}.${field} ${type};
+            FOR (${label[0].toLowerCase()}:${label}) REQUIRE ${label[0].toLowerCase()}.${field} IS UNIQUE
         `);
     }
 
@@ -484,7 +583,7 @@ export class DB {
         // Index for metadata category
         await session.run(`
             CREATE INDEX ${index_name} IF NOT EXISTS 
-            FOR (${label[0].toLowerCase}:${label}) ON (${label[0].toLowerCase}.${field})
+            FOR (${label[0].toLowerCase()}:${label}) ON (${label[0].toLowerCase()}.${field})
         `);
 
     }

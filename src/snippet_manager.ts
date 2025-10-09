@@ -1,6 +1,7 @@
 import { DB } from "./db.js";
 import { 
     CreateMetadataSchema, 
+    CreateMetadataSubtreeSchema, 
     CreateMetadataTreeSchema, 
     CreateSnippetSchema,
     DeleteMetadataSchema,
@@ -44,7 +45,8 @@ enum ToolName {
     UPDATE_SNIPPET_CONTENT = "update_snippet_content",
     SEARCH_SNIPPET_BY_NAME = "search_snippet_by_name",
     GET_METADATA_TREE = "get_metadata_tree",
-    CREATE_METADATA_TREE = "create_metadata_tree"
+    CREATE_METADATA_TREE = "create_metadata_tree",
+    CREATE_METADATA_SUBTREE = "create_metadata_subtree"
 };
 
 export const createServer = (db: DB) => {
@@ -176,6 +178,11 @@ export const createServer = (db: DB) => {
                 name: ToolName.CREATE_METADATA_TREE,
                 description: "Create a metadata tree",
                 inputSchema: zodToJsonSchema(CreateMetadataTreeSchema) as ToolInput
+            },
+            {
+                name: ToolName.CREATE_METADATA_SUBTREE,
+                description: "Create a metadata tree from a given metadata root",
+                inputSchema: zodToJsonSchema(CreateMetadataSubtreeSchema) as ToolInput
             }
         ];
 
@@ -303,6 +310,16 @@ export const createServer = (db: DB) => {
             const validatedArgs = CreateMetadataTreeSchema.parse(args);
             try {
                 const res = await db.createMetadataTree(validatedArgs);
+                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }) } ] };
+            } catch (error: any) {
+                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to create metadata tree"}) } ] };
+            }
+        }
+
+        if (name === ToolName.CREATE_METADATA_SUBTREE) {
+            const validatedArgs = CreateMetadataSubtreeSchema.parse(args);
+            try {
+                const res = await db.createMetadataSubtree(validatedArgs);
                 return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }) } ] };
             } catch (error: any) {
                 return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to create metadata tree"}) } ] };

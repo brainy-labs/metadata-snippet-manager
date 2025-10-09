@@ -88,3 +88,9 @@ export const CreateMetadataTreeSchema = z.object({
     root: MetadataTreeNodeSchema
 });
 export type CreateMetadataTreeInput = z.infer<typeof CreateMetadataTreeSchema>;
+
+export const CreateMetadataSubtreeSchema = z.object({
+    rootName: z.string().min(1).max(100).toLowerCase(),
+    children: z.array(MetadataTreeNodeSchema).min(1)
+});
+export type CreateMetadataSubtreeInput = z.infer<typeof CreateMetadataSubtreeSchema>;

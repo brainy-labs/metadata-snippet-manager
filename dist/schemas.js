@@ -60,3 +60,7 @@ export const CreateMetadataTreeSchema = z.object({
     category: z.nativeEnum(MetadataCategory),
     root: MetadataTreeNodeSchema
 });
+export const CreateMetadataSubtreeSchema = z.object({
+    rootName: z.string().min(1).max(100).toLowerCase(),
+    children: z.array(MetadataTreeNodeSchema).min(1)
+});

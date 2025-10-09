@@ -1,4 +1,4 @@
-import { CreateMetadataSchema, CreateMetadataTreeSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, GetMetadataTreeSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
+import { CreateMetadataSchema, CreateMetadataSubtreeSchema, CreateMetadataTreeSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, GetMetadataTreeSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -25,6 +25,7 @@ var ToolName;
     ToolName["SEARCH_SNIPPET_BY_NAME"] = "search_snippet_by_name";
     ToolName["GET_METADATA_TREE"] = "get_metadata_tree";
     ToolName["CREATE_METADATA_TREE"] = "create_metadata_tree";
+    ToolName["CREATE_METADATA_SUBTREE"] = "create_metadata_subtree";
 })(ToolName || (ToolName = {}));
 ;
 export const createServer = (db) => {
@@ -147,6 +148,11 @@ export const createServer = (db) => {
                 name: ToolName.CREATE_METADATA_TREE,
                 description: "Create a metadata tree",
                 inputSchema: zodToJsonSchema(CreateMetadataTreeSchema)
+            },
+            {
+                name: ToolName.CREATE_METADATA_SUBTREE,
+                description: "Create a metadata tree from a given metadata root",
+                inputSchema: zodToJsonSchema(CreateMetadataSubtreeSchema)
             }
         ];
         return { tools };
@@ -272,6 +278,16 @@ export const createServer = (db) => {
             const validatedArgs = CreateMetadataTreeSchema.parse(args);
             try {
                 const res = await db.createMetadataTree(validatedArgs);
+                return { content: [{ type: "text", text: JSON.stringify({ success: true, content: res }) }] };
+            }
+            catch (error) {
+                return { content: [{ type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to create metadata tree" }) }] };
+            }
+        }
+        if (name === ToolName.CREATE_METADATA_SUBTREE) {
+            const validatedArgs = CreateMetadataSubtreeSchema.parse(args);
+            try {
+                const res = await db.createMetadataSubtree(validatedArgs);
                 return { content: [{ type: "text", text: JSON.stringify({ success: true, content: res }) }] };
             }
             catch (error) {
