@@ -94,3 +94,14 @@ export const CreateMetadataSubtreeSchema = z.object({
     children: z.array(MetadataTreeNodeSchema).min(1)
 });
 export type CreateMetadataSubtreeInput = z.infer<typeof CreateMetadataSubtreeSchema>;
+
+export const GetMetadataSiblingsSchema = z.object({
+    name: z.string().min(1).max(100).toLowerCase()
+});
+export type GetMetadataSiblingsInput = z.infer<typeof GetMetadataSiblingsSchema>;
+
+export const MetadataSiblingsListSchema = z.object({
+    category: z.nativeEnum(MetadataCategory),
+    siblings: z.array(z.string().min(1).max(100).toLowerCase())
+});
+export type MetadataSiblingsList = z.infer<typeof MetadataSiblingsListSchema>;

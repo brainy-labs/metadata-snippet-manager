@@ -1,4 +1,4 @@
-import { CreateMetadataSchema, CreateMetadataSubtreeSchema, CreateMetadataTreeSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, GetMetadataTreeSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
+import { CreateMetadataSchema, CreateMetadataSubtreeSchema, CreateMetadataTreeSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, GetMetadataSiblingsSchema, GetMetadataTreeSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -26,6 +26,7 @@ var ToolName;
     ToolName["GET_METADATA_TREE"] = "get_metadata_tree";
     ToolName["CREATE_METADATA_TREE"] = "create_metadata_tree";
     ToolName["CREATE_METADATA_SUBTREE"] = "create_metadata_subtree";
+    ToolName["GET_METADATA_SIBLINGS"] = "get_metadata_siblings";
 })(ToolName || (ToolName = {}));
 ;
 export const createServer = (db) => {
@@ -153,6 +154,11 @@ export const createServer = (db) => {
                 name: ToolName.CREATE_METADATA_SUBTREE,
                 description: "Create a metadata tree from a given metadata root",
                 inputSchema: zodToJsonSchema(CreateMetadataSubtreeSchema)
+            },
+            {
+                name: ToolName.GET_METADATA_SIBLINGS,
+                description: "Get siblings of a metadata",
+                inputSchema: zodToJsonSchema(GetMetadataSiblingsSchema)
             }
         ];
         return { tools };
@@ -291,7 +297,17 @@ export const createServer = (db) => {
                 return { content: [{ type: "text", text: JSON.stringify({ success: true, content: res }) }] };
             }
             catch (error) {
-                return { content: [{ type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to create metadata tree" }) }] };
+                return { content: [{ type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to create metadata subtree" }) }] };
+            }
+        }
+        if (name === ToolName.GET_METADATA_SIBLINGS) {
+            const validatedArgs = GetMetadataSiblingsSchema.parse(args);
+            try {
+                const res = await db.getMetadataSiblings(validatedArgs);
+                return { content: [{ type: "text", text: JSON.stringify({ success: true, content: res }) }] };
+            }
+            catch (error) {
+                return { content: [{ type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to get metadata siblings" }) }] };
             }
         }
         throw new Error(`Unknown tool: ${name}`);

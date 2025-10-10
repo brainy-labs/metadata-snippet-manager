@@ -87,6 +87,10 @@ export class DB {
             await session.close();
         }
     }
+    /**
+     * Delete a metadata. It doesn't throw error if metadata doesn't exist
+     * @param input name of metadata to delete
+     */
     async deleteMetadataByName(input) {
         const session = this.driver.session();
         try {
@@ -96,6 +100,10 @@ export class DB {
             await session.close();
         }
     }
+    /**
+     * Delete a snippet. It doesn't throw error if snippet doesn't exist
+     * @param input name of snippet to delete
+     */
     async deleteSnippetsByName(input) {
         const session = this.driver.session();
         try {
@@ -204,6 +212,10 @@ export class DB {
             await session.close();
         }
     }
+    /**
+     * @param input name of snippet
+     * @returns a snippet with its metadata
+     */
     async searchSnippetByName(input) {
         const session = this.driver.session();
         try {
@@ -233,6 +245,11 @@ export class DB {
             await session.close();
         }
     }
+    /**
+     * Update the content of an existent snippet
+     * @param input name and content of snippet
+     * @returns the updated snippet
+     */
     async updateSnippetContent(input) {
         const session = this.driver.session();
         try {
@@ -265,6 +282,11 @@ export class DB {
             await session.close();
         }
     }
+    /**
+     * Get metadata tree and the category by the root name
+     * @param input the root name
+     * @returns the whole tree and the category of all metadata
+     */
     async getMetadataTree(input) {
         const session = this.driver.session();
         try {
@@ -326,6 +348,11 @@ export class DB {
             await session.close();
         }
     }
+    /**
+     * Create a metadata tree by a JSON structure
+     * @param input the metadata tree and the category
+     * @returns The metadata tree created
+     */
     async createMetadataTree(input) {
         const session = this.driver.session();
         try {
@@ -379,6 +406,11 @@ export class DB {
             await session.close();
         }
     }
+    /**
+     * Create a metadata tree by and existing root
+     * @param input the root and the tree
+     * @returns the root name, the category of the whole tree and the children count added
+     */
     async createMetadataSubtree(input) {
         const session = this.driver.session();
         try {
@@ -427,6 +459,44 @@ export class DB {
                 rootName: input.rootName,
                 category: category,
                 childrenCount: flatNodes.length
+            };
+        }
+        finally {
+            await session.close();
+        }
+    }
+    async getMetadataSiblings(input) {
+        const session = this.driver.session();
+        try {
+            const siblingCheck = await session.run(`
+                MATCH (m:Metadata)
+                WHERE m.name = $name
+                OPTIONAL MATCH (parent:Metadata)-[:PARENT_OF]->(m)
+                RETURN m, parent.name AS p 
+            `, { name: input.name });
+            if (siblingCheck.records.length === 0) {
+                throw new Error(`Metadata ${input.name} doesn't exist`);
+            }
+            const mainSib = siblingCheck.records[0].get('m').properties;
+            const parent = siblingCheck.records[0].get('p');
+            let siblings = [];
+            if (parent === null) {
+                siblings.push(mainSib.name);
+            }
+            else {
+                const res = await session.run(`
+                    MATCH (parent:Metadata)-[:PARENT_OF]->(m:Metadata)
+                    WHERE parent.name = $parent
+                    RETURN m.name as name
+                `, { parent: parent });
+                siblings = res.records.map(record => {
+                    const name = record.get('name');
+                    return name;
+                });
+            }
+            return {
+                category: mainSib.category,
+                siblings: siblings
             };
         }
         finally {

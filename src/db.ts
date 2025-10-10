@@ -7,8 +7,10 @@ import {
     CreateSnippetInput, 
     DeleteMetadataInput, 
     DeleteSnippetsInput, 
+    GetMetadataSiblingsInput, 
     GetMetadataTreeInput,
     Metadata, 
+    MetadataSiblingsList, 
     MetadataTreeNode,
     SearchSnippetByNameInput, 
     Snippet,
@@ -540,6 +542,48 @@ export class DB {
                 rootName: input.rootName,
                 category: category,
                 childrenCount: flatNodes.length
+            }
+        } finally {
+            await session.close();
+        }
+    }
+
+    async getMetadataSiblings(input: GetMetadataSiblingsInput) : Promise<MetadataSiblingsList> {
+        const session: Session = this.driver.session();
+        try{
+            const siblingCheck = await session.run(`
+                MATCH (m:Metadata)
+                WHERE m.name = $name
+                OPTIONAL MATCH (parent:Metadata)-[:PARENT_OF]->(m)
+                RETURN m, parent.name AS p 
+            `, { name: input.name });
+
+            if (siblingCheck.records.length === 0) {
+                throw new Error(`Metadata ${input.name} doesn't exist`);
+            }
+
+            const mainSib = siblingCheck.records[0].get('m').properties;
+            const parent = siblingCheck.records[0].get('p');
+
+            let siblings: string[] = [];
+            if (parent === null) {
+                siblings.push(mainSib.name);
+            } else{
+                const res = await session.run(`
+                    MATCH (parent:Metadata)-[:PARENT_OF]->(m:Metadata)
+                    WHERE parent.name = $parent
+                    RETURN m.name as name
+                `, { parent: parent });
+
+                siblings = res.records.map(record => {
+                    const name = record.get('name');
+                    return name;
+                });
+            }
+
+            return {
+                category: mainSib.category,
+                siblings: siblings
             }
         } finally {
             await session.close();

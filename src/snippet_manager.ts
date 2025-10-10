@@ -6,6 +6,7 @@ import {
     CreateSnippetSchema,
     DeleteMetadataSchema,
     DeleteSnippetsSchema,
+    GetMetadataSiblingsSchema,
     GetMetadataTreeSchema,
     SearchSnippetByNameSchema,
     UpdateSnippetContentSchema
@@ -46,7 +47,8 @@ enum ToolName {
     SEARCH_SNIPPET_BY_NAME = "search_snippet_by_name",
     GET_METADATA_TREE = "get_metadata_tree",
     CREATE_METADATA_TREE = "create_metadata_tree",
-    CREATE_METADATA_SUBTREE = "create_metadata_subtree"
+    CREATE_METADATA_SUBTREE = "create_metadata_subtree",
+    GET_METADATA_SIBLINGS = "get_metadata_siblings",
 };
 
 export const createServer = (db: DB) => {
@@ -183,6 +185,11 @@ export const createServer = (db: DB) => {
                 name: ToolName.CREATE_METADATA_SUBTREE,
                 description: "Create a metadata tree from a given metadata root",
                 inputSchema: zodToJsonSchema(CreateMetadataSubtreeSchema) as ToolInput
+            },
+            {
+                name: ToolName.GET_METADATA_SIBLINGS,
+                description: "Get siblings of a metadata",
+                inputSchema: zodToJsonSchema(GetMetadataSiblingsSchema) as ToolInput
             }
         ];
 
@@ -322,7 +329,17 @@ export const createServer = (db: DB) => {
                 const res = await db.createMetadataSubtree(validatedArgs);
                 return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }) } ] };
             } catch (error: any) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to create metadata tree"}) } ] };
+                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to create metadata subtree"}) } ] };
+            }
+        }
+
+        if (name === ToolName.GET_METADATA_SIBLINGS) {
+            const validatedArgs = GetMetadataSiblingsSchema.parse(args);
+            try {
+                const res = await db.getMetadataSiblings(validatedArgs);
+                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }) } ] };
+            } catch (error: any) {
+                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to get metadata siblings"}) } ] };
             }
         }
 

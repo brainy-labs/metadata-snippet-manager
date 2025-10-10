@@ -64,3 +64,10 @@ export const CreateMetadataSubtreeSchema = z.object({
     rootName: z.string().min(1).max(100).toLowerCase(),
     children: z.array(MetadataTreeNodeSchema).min(1)
 });
+export const GetMetadataSiblingsSchema = z.object({
+    name: z.string().min(1).max(100).toLowerCase()
+});
+export const MetadataSiblingsListSchema = z.object({
+    category: z.nativeEnum(MetadataCategory),
+    siblings: z.array(z.string().min(1).max(100).toLowerCase())
+});
