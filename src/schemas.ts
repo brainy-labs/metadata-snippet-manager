@@ -105,3 +105,13 @@ export const MetadataSiblingsListSchema = z.object({
     siblings: z.array(z.string().min(1).max(100).toLowerCase())
 });
 export type MetadataSiblingsList = z.infer<typeof MetadataSiblingsListSchema>;
+
+export const CreateMetadataForestSchema = z.object({
+    forest: z.array(CreateMetadataTreeSchema)
+});
+export type CreateMetadataForestInput = z.infer<typeof CreateMetadataForestSchema>;
+
+export const  GetMetadataForestSchema = z.object({
+    names: z.array(GetMetadataTreeSchema)
+});
+export type GetMetadataForestInput = z.infer<typeof GetMetadataForestSchema>;

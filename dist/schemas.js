@@ -71,3 +71,9 @@ export const MetadataSiblingsListSchema = z.object({
     category: z.nativeEnum(MetadataCategory),
     siblings: z.array(z.string().min(1).max(100).toLowerCase())
 });
+export const CreateMetadataForestSchema = z.object({
+    forest: z.array(CreateMetadataTreeSchema)
+});
+export const GetMetadataForestSchema = z.object({
+    names: z.array(GetMetadataTreeSchema)
+});

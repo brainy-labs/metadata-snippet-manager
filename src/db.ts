@@ -1,12 +1,14 @@
 import neo4j, { Driver, Session } from "neo4j-driver";
 import * as dotenv from 'dotenv';
 import { 
+    CreateMetadataForestInput,
     CreateMetadataInput, 
     CreateMetadataSubtreeInput, 
     CreateMetadataTreeInput, 
     CreateSnippetInput, 
     DeleteMetadataInput, 
     DeleteSnippetsInput, 
+    GetMetadataForestInput, 
     GetMetadataSiblingsInput, 
     GetMetadataTreeInput,
     Metadata, 
@@ -590,11 +592,47 @@ export class DB {
         }
     }
 
+    async createMetadataForest(input: CreateMetadataForestInput) {
+        const results: Array<{name: string, status: string, error?: string}> = [];
+
+        for (const tree of input.forest) {
+            try{
+                await this.createMetadataTree(tree);
+                results.push({
+                    name: tree.root.name,
+                    status: "created"
+                });
+            } catch (err: any) {
+                results.push({
+                    name: tree.root.name,
+                    status: "error",
+                    error: err.message
+                });
+            }
+        }
+        
+        let success: string = "partial success";
+        if (results.every(r => r.status === "created")) success = "success";
+        else if (results.every(r => r.status === "error")) success = "error";
+
+        return {
+            success,
+            results
+        };
+    }
+
+    async getMetadataForest(input: GetMetadataForestInput): Promise<MetadataTreeNode[]> {
+        const metadataForest = await Promise.all(
+            input.names.map(name => this.getMetadataTree(name))
+        );
+        return metadataForest;
+    }
+
     /**
      * Clears database and storage
      */
     async clear(): Promise<void> {
-        const session: Session = this.driver.session()
+        const session: Session = this.driver.session();
         try{
             await session.run("MATCH (n) DETACH DELETE n");
 

@@ -503,6 +503,38 @@ export class DB {
             await session.close();
         }
     }
+    async createMetadataForest(input) {
+        const results = [];
+        for (const tree of input.forest) {
+            try {
+                await this.createMetadataTree(tree);
+                results.push({
+                    name: tree.root.name,
+                    status: "created"
+                });
+            }
+            catch (err) {
+                results.push({
+                    name: tree.root.name,
+                    status: "error",
+                    error: err.message
+                });
+            }
+        }
+        let success = "partial success";
+        if (results.every(r => r.status === "created"))
+            success = "success";
+        else if (results.every(r => r.status === "error"))
+            success = "error";
+        return {
+            success,
+            results
+        };
+    }
+    async getMetadataForest(input) {
+        const metadataForest = await Promise.all(input.names.map(name => this.getMetadataTree(name)));
+        return metadataForest;
+    }
     /**
      * Clears database and storage
      */

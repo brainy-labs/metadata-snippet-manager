@@ -1,11 +1,13 @@
 import { DB } from "./db.js";
 import { 
+    CreateMetadataForestSchema,
     CreateMetadataSchema, 
     CreateMetadataSubtreeSchema, 
     CreateMetadataTreeSchema, 
     CreateSnippetSchema,
     DeleteMetadataSchema,
     DeleteSnippetsSchema,
+    GetMetadataForestSchema,
     GetMetadataSiblingsSchema,
     GetMetadataTreeSchema,
     SearchSnippetByNameSchema,
@@ -23,8 +25,9 @@ import {
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { fileURLToPath } from "url";
-import { dirname, join, resolve} from "path";
+import { dirname, join, resolve } from "path";
 import { readFileSync } from "fs";
+import { ar } from "zod/v4/locales";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -49,7 +52,35 @@ enum ToolName {
     CREATE_METADATA_TREE = "create_metadata_tree",
     CREATE_METADATA_SUBTREE = "create_metadata_subtree",
     GET_METADATA_SIBLINGS = "get_metadata_siblings",
-};
+    CREATE_METADATA_FOREST = "create_metadata_forest",
+    GET_METADATA_FOREST = "get_metadata_forest"
+}
+
+async function handleTool<T>(
+    schema: any,
+    args: unknown,
+    dbMethod: (validated: T) => Promise<any>,
+    errorMessage: string
+) {
+    const validatedArgs = schema.parse(args);
+    try {
+        const res = await dbMethod(validatedArgs);
+        return {
+            content: [
+                { type: "text", text: JSON.stringify({ success: true, content: res }) }
+            ]
+        };
+    } catch (error: any) {
+        return {
+            content: [
+                {
+                    type: "text",
+                    text: JSON.stringify({ success: false, error: error.message || errorMessage })
+                }
+            ]
+        };
+    }
+}
 
 export const createServer = (db: DB) => {
     const server = new Server(
@@ -71,18 +102,10 @@ export const createServer = (db: DB) => {
     );
 
     server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    return {
+        return {
             resources: [
-                {
-                    uri: "metadata://all",
-                    name: "All Metadata",
-                    description: "List of all metadata"
-                },
-                {
-                    uri: "snippets://all",
-                    name: "All Snippets",
-                    description: "List of all snippets"
-                }
+                { uri: "metadata://all", name: "All Metadata", description: "List of all metadata" },
+                { uri: "snippets://all", name: "All Snippets", description: "List of all snippets" }
             ]
         };
     });
@@ -94,11 +117,7 @@ export const createServer = (db: DB) => {
             const res = await db.getAllMetadata();
             return {
                 contents: [
-                    {
-                        uri: uri,  
-                        mimeType: "application/json",
-                        text: JSON.stringify(res, null, 2)
-                    }
+                    { uri, mimeType: "application/json", text: JSON.stringify(res, null, 2) }
                 ]
             };
         }
@@ -107,11 +126,7 @@ export const createServer = (db: DB) => {
             const res = await db.getAllSnippets();
             return {
                 contents: [
-                    {
-                        uri: uri,
-                        mimeType: "application/json",
-                        text: JSON.stringify(res, null, 2)
-                    }
+                    { uri, mimeType: "application/json", text: JSON.stringify(res, null, 2) }
                 ]
             };
         }
@@ -121,76 +136,22 @@ export const createServer = (db: DB) => {
 
     server.setRequestHandler(ListToolsRequestSchema, async () => {
         const tools: Tool[] = [
-            {
-                name: ToolName.TEST_DB,
-                description: "Tests db connection",
-                inputSchema: zodToJsonSchema(z.object({})) as ToolInput
-            },
-            {
-                name: ToolName.CLEAR,
-                description: "Clear all data",
-                inputSchema: zodToJsonSchema(z.object({})) as ToolInput
-            },
-            {
-                name: ToolName.CREATE_METADATA,
-                description: "Create a metadata",
-                inputSchema: zodToJsonSchema(CreateMetadataSchema) as ToolInput
-            },
-            {
-                name: ToolName.CREATE_SNIPPET,
-                description: "Create a snippet with metadata. All metadata have the same category",
-                inputSchema: zodToJsonSchema(CreateSnippetSchema) as ToolInput
-            },
-            {
-                name: ToolName.GET_ALL_SNIPPETS,
-                description: "Get all snippets",
-                inputSchema: zodToJsonSchema(z.object({})) as ToolInput
-            },
-            {
-                name: ToolName.GET_ALL_METADATA,
-                description: "Get all metadata",
-                inputSchema: zodToJsonSchema(z.object({})) as ToolInput
-            },
-            {
-                name: ToolName.DELETE_METADATA,
-                description: "Delete metadata",
-                inputSchema: zodToJsonSchema(DeleteMetadataSchema) as ToolInput
-            },
-            {
-                name: ToolName.DELETE_SNIPPETS,
-                description: "Delete snippets",
-                inputSchema: zodToJsonSchema(DeleteSnippetsSchema) as ToolInput
-            },
-            {
-                name: ToolName.UPDATE_SNIPPET_CONTENT,
-                description: "Update snippet content",
-                inputSchema: zodToJsonSchema(UpdateSnippetContentSchema) as ToolInput
-            },
-            {
-                name: ToolName.SEARCH_SNIPPET_BY_NAME,
-                description: "Get snippet searching by name",
-                inputSchema: zodToJsonSchema(SearchSnippetByNameSchema) as ToolInput
-            },
-            {
-                name: ToolName.GET_METADATA_TREE,
-                description: "Get a metadata tree by the root name",
-                inputSchema: zodToJsonSchema(GetMetadataTreeSchema) as ToolInput
-            },
-            {
-                name: ToolName.CREATE_METADATA_TREE,
-                description: "Create a metadata tree",
-                inputSchema: zodToJsonSchema(CreateMetadataTreeSchema) as ToolInput
-            },
-            {
-                name: ToolName.CREATE_METADATA_SUBTREE,
-                description: "Create a metadata tree from a given metadata root",
-                inputSchema: zodToJsonSchema(CreateMetadataSubtreeSchema) as ToolInput
-            },
-            {
-                name: ToolName.GET_METADATA_SIBLINGS,
-                description: "Get siblings of a metadata",
-                inputSchema: zodToJsonSchema(GetMetadataSiblingsSchema) as ToolInput
-            }
+            { name: ToolName.TEST_DB, description: "Tests db connection", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
+            { name: ToolName.CLEAR, description: "Clear all data", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
+            { name: ToolName.CREATE_METADATA, description: "Create a metadata", inputSchema: zodToJsonSchema(CreateMetadataSchema) as ToolInput },
+            { name: ToolName.CREATE_SNIPPET, description: "Create a snippet with metadata. All metadata have the same category", inputSchema: zodToJsonSchema(CreateSnippetSchema) as ToolInput },
+            { name: ToolName.GET_ALL_SNIPPETS, description: "Get all snippets", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
+            { name: ToolName.GET_ALL_METADATA, description: "Get all metadata", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
+            { name: ToolName.DELETE_METADATA, description: "Delete metadata", inputSchema: zodToJsonSchema(DeleteMetadataSchema) as ToolInput },
+            { name: ToolName.DELETE_SNIPPETS, description: "Delete snippets", inputSchema: zodToJsonSchema(DeleteSnippetsSchema) as ToolInput },
+            { name: ToolName.UPDATE_SNIPPET_CONTENT, description: "Update snippet content", inputSchema: zodToJsonSchema(UpdateSnippetContentSchema) as ToolInput },
+            { name: ToolName.SEARCH_SNIPPET_BY_NAME, description: "Get snippet searching by name", inputSchema: zodToJsonSchema(SearchSnippetByNameSchema) as ToolInput },
+            { name: ToolName.GET_METADATA_TREE, description: "Get a metadata tree by the root name", inputSchema: zodToJsonSchema(GetMetadataTreeSchema) as ToolInput },
+            { name: ToolName.CREATE_METADATA_TREE, description: "Create a metadata tree", inputSchema: zodToJsonSchema(CreateMetadataTreeSchema) as ToolInput },
+            { name: ToolName.CREATE_METADATA_SUBTREE, description: "Create a metadata tree from a given metadata root", inputSchema: zodToJsonSchema(CreateMetadataSubtreeSchema) as ToolInput },
+            { name: ToolName.GET_METADATA_SIBLINGS, description: "Get siblings of a metadata", inputSchema: zodToJsonSchema(GetMetadataSiblingsSchema) as ToolInput },
+            { name: ToolName.CREATE_METADATA_FOREST, description: "Create a metadata forest", inputSchema: zodToJsonSchema(CreateMetadataForestSchema) as ToolInput },
+            { name: ToolName.GET_METADATA_FOREST, description: "Get a metadata forest by root names", inputSchema: zodToJsonSchema(GetMetadataForestSchema) as ToolInput }
         ];
 
         return { tools };
@@ -202,146 +163,79 @@ export const createServer = (db: DB) => {
         if (name === ToolName.TEST_DB) {
             try {
                 const res = await db.test_db_connection();
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: `Test returned ${res}` }) } ] };
+                return { content: [{ type: "text", text: JSON.stringify({ success: true, content: `Test returned ${res}` }) }] };
             } catch (error: any) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, error: error.message || 'DB test failed' }) } ] };
+                return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'DB test failed' }) }] };
             }
         }
 
         if (name === ToolName.CLEAR) {
             try {
                 await db.clear();
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: 'DB and storage cleared' }) } ] };
+                return { content: [{ type: "text", text: JSON.stringify({ success: true, content: 'DB and storage cleared' }) }] };
             } catch (error: any) { 
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to clear DB' }) } ] };
+                return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to clear DB' }) }] };
             }
         }
 
         if (name === ToolName.CREATE_METADATA) {
-            const metadata = CreateMetadataSchema.parse(args);
-            try {
-                await db.createMetadata(metadata);
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: metadata }) } ] };
-            } catch (error: any) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to create metadata' }) } ] };
-            }
+            return await handleTool(CreateMetadataSchema, args, db.createMetadata.bind(db), "Failed to create metadata");
         }
 
         if (name === ToolName.CREATE_SNIPPET) {
-            const snippet = CreateSnippetSchema.parse(args);
-            try {
-                const res = await db.createSnippet(snippet);
-                return {
-                    content: [
-                        {
-                            type: "text",
-                            text: JSON.stringify({ success: true, res })
-                        }
-                    ]
-                };
-            } catch (error) {
-                return {
-                    content: [ { type: "text", text: JSON.stringify({ success: false, error: error ||  'Failed to create snippet' }) } ] };
-            }
+            return await handleTool(CreateSnippetSchema, args, db.createSnippet.bind(db), "Failed to create snippet");
         }
 
         if (name === ToolName.GET_ALL_SNIPPETS) {
             try {
                 const res = await db.getAllSnippets();
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }, null, 2) } ] };
+                return { content: [{ type: "text", text: JSON.stringify({ success: true, content: res }, null, 2) }] };
             } catch (error: any) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to get snippets' }) } ] };
+                return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to get snippets' }) }] };
             }
         }
 
         if (name === ToolName.GET_ALL_METADATA) {
             try {
                 const res = await db.getAllMetadata();
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }, null, 2) } ] };
+                return { content: [{ type: "text", text: JSON.stringify({ success: true, content: res }, null, 2) }] };
             } catch (error: any) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to get metadata' }) } ] };
+                return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to get metadata' }) }] };
             }
         }
 
-        if (name === ToolName.DELETE_METADATA) {
-            const names = DeleteMetadataSchema.parse(args);
-            try {
-                await db.deleteMetadataByName(names);
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: "Metadata deleted" } ) } ] };
-            } catch (error) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error || 'Failed to delete metadata' } ) } ] };
-            }
+        if (name === ToolName.DELETE_METADATA) 
+            return await handleTool(DeleteMetadataSchema, args, db.deleteMetadataByName.bind(db), "Failed to delete metadata");
+
+        if (name === ToolName.DELETE_SNIPPETS) 
+            return await handleTool(DeleteSnippetsSchema, args, db.deleteSnippetsByName.bind(db), "Failed to delete snippets");
+
+        if (name === ToolName.UPDATE_SNIPPET_CONTENT) 
+            return await handleTool(UpdateSnippetContentSchema, args, db.updateSnippetContent.bind(db), "Failed to update snippet");
+
+        if (name === ToolName.SEARCH_SNIPPET_BY_NAME) 
+            return await handleTool(SearchSnippetByNameSchema, args, db.searchSnippetByName.bind(db), "Failed to search snippet");
+
+        if (name === ToolName.GET_METADATA_TREE) 
+            return await handleTool(GetMetadataTreeSchema, args, db.getMetadataTree.bind(db), "Failed to get metadata tree");
+
+        if (name === ToolName.CREATE_METADATA_TREE) 
+            return await handleTool(CreateMetadataTreeSchema, args, db.createMetadataTree.bind(db), "Failed to create metadata tree");
+
+        if (name === ToolName.CREATE_METADATA_SUBTREE) 
+            return await handleTool(CreateMetadataSubtreeSchema, args, db.createMetadataSubtree.bind(db), "Failed to create metadata subtree");
+
+        if (name === ToolName.GET_METADATA_SIBLINGS) 
+            return await handleTool(GetMetadataSiblingsSchema, args, db.getMetadataSiblings.bind(db), "Failed to get metadata siblings");
+
+        if (name === ToolName.CREATE_METADATA_FOREST) {
+            const validatedArgs = CreateMetadataForestSchema.parse(args);
+            const res = await db.createMetadataForest(validatedArgs);
+            return { content: [{ type: "text", text: JSON.stringify(res) }] };
         }
 
-        if (name === ToolName.DELETE_SNIPPETS) {
-            const names = DeleteSnippetsSchema.parse(args);
-            try {
-                await db.deleteSnippetsByName(names);
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: "Snippets deleted" } ) } ] };
-            } catch (error) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: "Failed to delete snippets" } ) } ] };
-            }
-        }
-
-        if (name === ToolName.UPDATE_SNIPPET_CONTENT) {
-            const validatedArgs = UpdateSnippetContentSchema.parse(args);
-            try {
-                const res = await db.updateSnippetContent(validatedArgs);
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res}) } ] };
-            } catch (error: any) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message }) } ] };
-           }
-        }
-
-        if (name === ToolName.SEARCH_SNIPPET_BY_NAME) {
-            const validatedArgs = SearchSnippetByNameSchema.parse(args);
-            try {
-                const res = await db.searchSnippetByName(validatedArgs);
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }) } ] };
-            } catch (error: any) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to search snippet"}) } ] };
-            }
-        }
-
-        if (name === ToolName.GET_METADATA_TREE) {
-            const validatedArgs = GetMetadataTreeSchema.parse(args);
-            try {
-                const res = await db.getMetadataTree(validatedArgs);
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }) } ] };
-            } catch (error: any) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to get metadata tree"}) } ] };
-            }
-        }
-
-        if (name === ToolName.CREATE_METADATA_TREE) {
-            const validatedArgs = CreateMetadataTreeSchema.parse(args);
-            try {
-                const res = await db.createMetadataTree(validatedArgs);
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }) } ] };
-            } catch (error: any) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to create metadata tree"}) } ] };
-            }
-        }
-
-        if (name === ToolName.CREATE_METADATA_SUBTREE) {
-            const validatedArgs = CreateMetadataSubtreeSchema.parse(args);
-            try {
-                const res = await db.createMetadataSubtree(validatedArgs);
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }) } ] };
-            } catch (error: any) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to create metadata subtree"}) } ] };
-            }
-        }
-
-        if (name === ToolName.GET_METADATA_SIBLINGS) {
-            const validatedArgs = GetMetadataSiblingsSchema.parse(args);
-            try {
-                const res = await db.getMetadataSiblings(validatedArgs);
-                return { content: [ { type: "text", text: JSON.stringify({ success: true, content: res }) } ] };
-            } catch (error: any) {
-                return { content: [ { type: "text", text: JSON.stringify({ success: false, content: error.message || "Failed to get metadata siblings"}) } ] };
-            }
-        }
+        if (name === ToolName.GET_METADATA_FOREST) 
+            return await handleTool(GetMetadataForestSchema, args, db.getMetadataForest.bind(db), "Failed to get metadata forest");
 
         throw new Error(`Unknown tool: ${name}`);
     });
