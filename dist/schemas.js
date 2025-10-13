@@ -77,3 +77,17 @@ export const CreateMetadataForestSchema = z.object({
 export const GetMetadataForestSchema = z.object({
     names: z.array(GetMetadataTreeSchema)
 });
+export const GetMetadataPathSchema = z.object({
+    name: z.string().min(1).max(100).toLowerCase()
+});
+export const MetadataPathSchema = z.object({
+    cateogory: z.nativeEnum(MetadataCategory),
+    path: z.array(z.string().min(1).max(100).toLowerCase())
+});
+export const GetMetadataSiblingsForestSchema = z.object({
+    name: z.string().min(1).max(100).toLowerCase()
+});
+export const MetadataSiblingsForestSchema = z.object({
+    category: z.nativeEnum(MetadataCategory),
+    forest: z.array(MetadataTreeNodeSchema)
+});

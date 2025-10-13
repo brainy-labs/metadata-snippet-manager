@@ -576,6 +576,53 @@ export class DB {
         const wholeForest = await this.getMetadataForest(roots);
         return wholeForest;
     }
+    async getMetadataPath(input) {
+        const session = this.driver.session();
+        try {
+            // Check if metadata exists
+            const metadataCheck = await session.run(`
+                MATCH (m:Metadata {name: $name})
+                RETURN m.category as category
+            `, { name: input.name });
+            if (metadataCheck.records.length === 0)
+                throw new Error(`Metadata '${input.name}' not found`);
+            const category = metadataCheck.records[0].get('category');
+            // Get path from the root to the target metadata
+            const result = await session.run(`
+                MATCH path = (root:Metadata)-[:PARENT_OF*0..]->(target:Metadata {name: $name})
+                WHERE NOT (root)<-[:PARENT_OF]-(:Metadata)
+                WITH path, length(path) as pathLength
+                ORDER BY pathLength DESC
+                LIMIT 1
+                WITH [node in nodes(path) | node.name] as pathNames
+                RETURN pathNames
+            `, { name: input.name });
+            if (result.records.length === 0)
+                throw new Error(`Failed to find path to metadata '${input.name}'`);
+            const path = result.records[0].get('pathNames');
+            return {
+                cateogory: category,
+                path: path
+            };
+        }
+        finally {
+            await session.close();
+        }
+    }
+    async getMetadataSiblingsForest(input) {
+        // Get siblings of the input metadata
+        const siblingsData = await this.getMetadataSiblings({ name: input.name });
+        // Build the forest by getting each sibling's tree
+        const forest = [];
+        for (const siblingName of siblingsData.siblings) {
+            const tree = await this.getMetadataTree({ name: siblingName });
+            forest.push(tree.root);
+        }
+        return {
+            category: siblingsData.category,
+            forest: forest
+        };
+    }
     /**
      * Clears database and storage
      */

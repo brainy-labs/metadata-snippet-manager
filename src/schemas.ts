@@ -115,3 +115,25 @@ export const  GetMetadataForestSchema = z.object({
     names: z.array(GetMetadataTreeSchema)
 });
 export type GetMetadataForestInput = z.infer<typeof GetMetadataForestSchema>;
+
+export const GetMetadataPathSchema = z.object({
+    name: z.string().min(1).max(100).toLowerCase()
+});
+export type GetMetadataPathInput = z.infer<typeof GetMetadataPathSchema>;
+
+export const MetadataPathSchema = z.object({
+    cateogory: z.nativeEnum(MetadataCategory),
+    path: z.array(z.string().min(1).max(100).toLowerCase())
+});
+export type MetadataPath = z.infer<typeof MetadataPathSchema>;
+
+export const GetMetadataSiblingsForestSchema = z.object({
+    name: z.string().min(1).max(100).toLowerCase()
+});
+export type GetMetadataSiblingsForestInput = z.infer<typeof GetMetadataSiblingsForestSchema>;
+
+export const MetadataSiblingsForestSchema = z.object({
+    category: z.nativeEnum(MetadataCategory),
+    forest: z.array(MetadataTreeNodeSchema)
+});
+export type MetadataSiblingsForest = z.infer<typeof MetadataSiblingsForestSchema>; 
