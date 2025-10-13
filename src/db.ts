@@ -550,6 +550,12 @@ export class DB {
         }
     }
 
+    /**
+     * Get siblings of a metadata (All metadata with the same parent)
+     * If the input is a root, it returns an array with one single element, the root itself 
+     * @param input a metadata name
+     * @returns a list of siblings and the category of all siblings
+     */
     async getMetadataSiblings(input: GetMetadataSiblingsInput) : Promise<MetadataSiblingsList> {
         const session: Session = this.driver.session();
         try{
@@ -592,6 +598,11 @@ export class DB {
         }
     }
 
+    /**
+     * Create a metadata forest from a json object
+     * @param input a list of trees with categories
+     * @returns an array of objects telling the success of insetions of each tree and a variable telling if it's patial success, success or total failure (error) 
+     */
     async createMetadataForest(input: CreateMetadataForestInput) {
         const results: Array<{name: string, status: string, error?: string}> = [];
 
@@ -621,6 +632,11 @@ export class DB {
         };
     }
 
+    /**
+     * Get a metadata forest by the roots, it works for mid-nodes as well 
+     * @param input a list of root names
+     * @returns a json like forest
+     */
     async getMetadataForest(input: GetMetadataForestInput): Promise<MetadataTreeNode[]> {
         const metadataForest = await Promise.all(
             input.names.map(name => this.getMetadataTree(name))
@@ -628,6 +644,10 @@ export class DB {
         return metadataForest;
     }
 
+    /**
+     * Get the whole metadata forest 
+     * @returns a list of all roots with their descendants 
+     */
     async getWholeMetadataForest(): Promise<MetadataTreeNode[]> {
         const session = this.driver.session();
         let roots: GetMetadataForestInput = { names: [] };
