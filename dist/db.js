@@ -535,6 +535,27 @@ export class DB {
         const metadataForest = await Promise.all(input.names.map(name => this.getMetadataTree(name)));
         return metadataForest;
     }
+    async getWholeMetadataForest() {
+        const session = this.driver.session();
+        let roots = { names: [] };
+        try {
+            const res = await session.run(`
+                MATCH (m:Metadata)
+                WHERE NOT (m)<-[:PARENT_OF]-(:Metadata)
+                RETURN m.name as name
+            `);
+            res.records.forEach(item => {
+                roots.names.push({ name: item.get('name') });
+            });
+            await session.close();
+        }
+        catch {
+            await session.close();
+            throw new Error(`Error getting roots`);
+        }
+        const wholeForest = await this.getMetadataForest(roots);
+        return wholeForest;
+    }
     /**
      * Clears database and storage
      */

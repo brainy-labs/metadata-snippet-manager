@@ -53,7 +53,8 @@ enum ToolName {
     CREATE_METADATA_SUBTREE = "create_metadata_subtree",
     GET_METADATA_SIBLINGS = "get_metadata_siblings",
     CREATE_METADATA_FOREST = "create_metadata_forest",
-    GET_METADATA_FOREST = "get_metadata_forest"
+    GET_METADATA_FOREST = "get_metadata_forest",
+    GET_WHOLE_METADATA_FOREST = "get_whole_metadata_forest"
 }
 
 async function handleTool<T>(
@@ -151,7 +152,8 @@ export const createServer = (db: DB) => {
             { name: ToolName.CREATE_METADATA_SUBTREE, description: "Create a metadata tree from a given metadata root", inputSchema: zodToJsonSchema(CreateMetadataSubtreeSchema) as ToolInput },
             { name: ToolName.GET_METADATA_SIBLINGS, description: "Get siblings of a metadata", inputSchema: zodToJsonSchema(GetMetadataSiblingsSchema) as ToolInput },
             { name: ToolName.CREATE_METADATA_FOREST, description: "Create a metadata forest", inputSchema: zodToJsonSchema(CreateMetadataForestSchema) as ToolInput },
-            { name: ToolName.GET_METADATA_FOREST, description: "Get a metadata forest by root names", inputSchema: zodToJsonSchema(GetMetadataForestSchema) as ToolInput }
+            { name: ToolName.GET_METADATA_FOREST, description: "Get a metadata forest by root names", inputSchema: zodToJsonSchema(GetMetadataForestSchema) as ToolInput },
+            { name: ToolName.GET_WHOLE_METADATA_FOREST, description: "Get all metadata in the forest form", inputSchema: zodToJsonSchema(z.object({})) as ToolInput }
         ];
 
         return { tools };
@@ -236,6 +238,15 @@ export const createServer = (db: DB) => {
 
         if (name === ToolName.GET_METADATA_FOREST) 
             return await handleTool(GetMetadataForestSchema, args, db.getMetadataForest.bind(db), "Failed to get metadata forest");
+
+        if (name === ToolName.GET_WHOLE_METADATA_FOREST) {
+            try {
+                const res = await db.getWholeMetadataForest();
+                return { content: [{ type: "text", text: JSON.stringify({ success: true, content: res }, null, 2) }] };
+            } catch (error: any) {
+                return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to get whole metadata forest' }) }] };
+            }
+        }
 
         throw new Error(`Unknown tool: ${name}`);
     });
