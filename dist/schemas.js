@@ -107,3 +107,11 @@ export const MetadataParentChildSuccess = z.object({
     results: MetadataParentChildStatusSchema,
     success: z.enum(["success", "partial success", "error"])
 });
+export const PruneMetadataBranchSchema = z.object({
+    parentName: z.string().min(1).max(100).toLowerCase(),
+    childName: z.string().min(1).max(100).toLowerCase(),
+});
+export const PruneMetadataNewTreesSchema = z.object({
+    parentTree: MetadataTreeNodeSchema,
+    childTree: MetadataTreeNodeSchema
+});

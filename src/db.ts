@@ -21,10 +21,14 @@ import {
     MetadataSiblingsForest, 
     MetadataSiblingsList, 
     MetadataTreeNode,
+    PruneMetadataBranchInput,
+    PruneMetadataNewTrees,
     SearchSnippetByNameInput, 
     Snippet,
     upDateSnippetContentInput, 
 } from "./schemas.js";
+import { ChildProcess } from "child_process";
+import { check } from "zod/v4";
 
 dotenv.config();
 
@@ -735,7 +739,7 @@ export class DB {
         };
     }
 
-    async AddMetadataParent(input: AddMetadataParentInput) : Promise<MetadataParentChildSuccess> {
+    async addMetadataParent(input: AddMetadataParentInput) : Promise<MetadataParentChildSuccess> {
         const results: MetadataParentChildStatus = [];
 
         for (const pair of input.pairs) {
@@ -807,6 +811,46 @@ export class DB {
             success: success
         }
        
+    }
+
+    async pruneMetadataBranch (input: PruneMetadataBranchInput) : Promise<PruneMetadataNewTrees> {
+        const session = this.driver.session();
+        try {
+            // Check if both node exists
+            const checkQuery = await session.run(`
+                MATCH (p:Metadata {name: $parentName})
+                MATCH (c:Metadata {name: $childName})
+                RETURN p, c
+            `, { parentName: input.parentName, childName: input.childName });
+
+            if (checkQuery.records.length === 0) 
+                throw new Error(`One or both metadata not found`);
+
+            // Check if the relationship exists
+            const relationQuery = await session.run(`
+                MATCH (p:Metadata {name: $parentName})-[r:PARENT_OF]->(c:Metadata {name: $childName})
+                RETURN r
+            `, { parentName: input.parentName, childName: input.childName });
+
+            if (relationQuery.records.length === 0) 
+                throw new Error(`No parent-child relationship exists between '${input.parentName}' and '${input.childName}'`);
+
+            // Remove the parent-child relationship
+            await session.run(`
+                MATCH (p:Metadata {name: $parentName})-[r:PARENT_OF]->(c:Metadata {name: $childName})
+                DELETE r
+            `, { parentName: input.parentName, childName: input.childName });
+        } finally {
+            await session.close();
+        }
+
+        const parentTree = await this.getMetadataTree({ name: input.parentName });
+        const childTree = await this.getMetadataTree({ name: input.childName });
+
+        return {
+            parentTree: parentTree,
+            childTree: childTree
+        };
     }
 
     /**

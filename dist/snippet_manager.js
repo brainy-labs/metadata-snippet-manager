@@ -1,4 +1,4 @@
-import { AddMetadataParentSchema, CreateMetadataForestSchema, CreateMetadataSchema, CreateMetadataSubtreeSchema, CreateMetadataTreeSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, GetMetadataForestSchema, GetMetadataPathSchema, GetMetadataSiblingsForestSchema, GetMetadataSiblingsSchema, GetMetadataTreeSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
+import { AddMetadataParentSchema, CreateMetadataForestSchema, CreateMetadataSchema, CreateMetadataSubtreeSchema, CreateMetadataTreeSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, GetMetadataForestSchema, GetMetadataPathSchema, GetMetadataSiblingsForestSchema, GetMetadataSiblingsSchema, GetMetadataTreeSchema, PruneMetadataBranchSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -33,6 +33,7 @@ var ToolName;
     ToolName["GET_METADATA_PATH"] = "get_metadata_path";
     ToolName["GET_METADATA_SIBLINGS_FOREST"] = "get_metadata_siblings_forest";
     ToolName["ADD_METADATA_PARENT"] = "add_metadata_parent";
+    ToolName["PRUNE_METADATA_BRANCH"] = "prune_metadata_branch";
 })(ToolName || (ToolName = {}));
 async function handleTool(schema, args, dbMethod, errorMessage) {
     const validatedArgs = schema.parse(args);
@@ -120,6 +121,7 @@ export const createServer = (db) => {
             { name: ToolName.GET_METADATA_PATH, description: "Get the path from the root to the specified metadata", inputSchema: zodToJsonSchema(GetMetadataPathSchema) },
             { name: ToolName.GET_METADATA_SIBLINGS_FOREST, description: "Get a forest which roots are all siblings of the specified metadata item (metadata item in input included)", inputSchema: zodToJsonSchema(GetMetadataSiblingsForestSchema) },
             { name: ToolName.ADD_METADATA_PARENT, description: "Add a parent to a specified metadata item (that item can't have other parents and has to be of the same category of the new parent)", inputSchema: zodToJsonSchema(AddMetadataParentSchema) },
+            { name: ToolName.PRUNE_METADATA_BRANCH, description: "Remove relationship between a metadata parent and a metadata child. The child becomes a root.", inputSchema: zodToJsonSchema(PruneMetadataBranchSchema) },
         ];
         return { tools };
     });
@@ -204,7 +206,9 @@ export const createServer = (db) => {
         if (name === ToolName.GET_METADATA_SIBLINGS_FOREST)
             return await handleTool(GetMetadataSiblingsForestSchema, args, db.getMetadataSiblingsForest.bind(db), "Failed to get metadata siblings forest");
         if (name === ToolName.ADD_METADATA_PARENT)
-            return await handleTool(AddMetadataParentSchema, args, db.AddMetadataParent.bind(db), "Failed to add parent to metadata item");
+            return await handleTool(AddMetadataParentSchema, args, db.addMetadataParent.bind(db), "Failed to add parent to metadata item");
+        if (name === ToolName.PRUNE_METADATA_BRANCH)
+            return await handleTool(PruneMetadataBranchSchema, args, db.pruneMetadataBranch.bind(db), "Failed to prune branch");
         throw new Error(`Unknown tool: ${name}`);
     });
     return { server };

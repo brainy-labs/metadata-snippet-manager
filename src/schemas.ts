@@ -159,3 +159,15 @@ export const MetadataParentChildSuccess = z.object({
     success: z.enum(["success", "partial success", "error"])
 })
 export type MetadataParentChildSuccess = z.infer<typeof MetadataParentChildSuccess>;
+
+export const PruneMetadataBranchSchema = z.object({
+    parentName: z.string().min(1).max(100).toLowerCase(),
+    childName: z.string().min(1).max(100).toLowerCase(),
+});
+export type PruneMetadataBranchInput = z.infer<typeof PruneMetadataBranchSchema>;
+
+export const PruneMetadataNewTreesSchema = z.object({
+    parentTree: MetadataTreeNodeSchema,
+    childTree: MetadataTreeNodeSchema
+});
+export type PruneMetadataNewTrees = z.infer<typeof PruneMetadataNewTreesSchema>;

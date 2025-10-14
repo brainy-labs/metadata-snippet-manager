@@ -13,6 +13,7 @@ import {
     GetMetadataSiblingsForestSchema,
     GetMetadataSiblingsSchema,
     GetMetadataTreeSchema,
+    PruneMetadataBranchSchema,
     SearchSnippetByNameSchema,
     UpdateSnippetContentSchema
 } from "./schemas.js";
@@ -60,7 +61,8 @@ enum ToolName {
     GET_WHOLE_METADATA_FOREST = "get_whole_metadata_forest",
     GET_METADATA_PATH = "get_metadata_path",
     GET_METADATA_SIBLINGS_FOREST = "get_metadata_siblings_forest",
-    ADD_METADATA_PARENT = "add_metadata_parent"
+    ADD_METADATA_PARENT = "add_metadata_parent",
+    PRUNE_METADATA_BRANCH = "prune_metadata_branch"
 }
 
 async function handleTool<T>(
@@ -163,6 +165,7 @@ export const createServer = (db: DB) => {
             { name: ToolName.GET_METADATA_PATH, description: "Get the path from the root to the specified metadata", inputSchema: zodToJsonSchema(GetMetadataPathSchema) as ToolInput},
             { name: ToolName.GET_METADATA_SIBLINGS_FOREST, description: "Get a forest which roots are all siblings of the specified metadata item (metadata item in input included)", inputSchema: zodToJsonSchema(GetMetadataSiblingsForestSchema) as ToolInput },
             { name: ToolName.ADD_METADATA_PARENT, description: "Add a parent to a specified metadata item (that item can't have other parents and has to be of the same category of the new parent)", inputSchema: zodToJsonSchema(AddMetadataParentSchema) as ToolInput },
+            { name: ToolName.PRUNE_METADATA_BRANCH, description: "Remove relationship between a metadata parent and a metadata child. The child becomes a root.", inputSchema: zodToJsonSchema(PruneMetadataBranchSchema) as ToolInput },
         ];
 
         return { tools };
@@ -264,7 +267,10 @@ export const createServer = (db: DB) => {
             return await handleTool(GetMetadataSiblingsForestSchema, args, db.getMetadataSiblingsForest.bind(db), "Failed to get metadata siblings forest");
 
         if (name === ToolName.ADD_METADATA_PARENT)
-            return await handleTool(AddMetadataParentSchema, args, db.AddMetadataParent.bind(db), "Failed to add parent to metadata item");
+            return await handleTool(AddMetadataParentSchema, args, db.addMetadataParent.bind(db), "Failed to add parent to metadata item");
+
+        if (name === ToolName.PRUNE_METADATA_BRANCH)
+            return await handleTool(PruneMetadataBranchSchema, args, db.pruneMetadataBranch.bind(db), "Failed to prune branch");
 
         throw new Error(`Unknown tool: ${name}`);
     });
