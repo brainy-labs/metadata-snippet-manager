@@ -623,6 +623,69 @@ export class DB {
             forest: forest
         };
     }
+    async AddMetadataParent(input) {
+        const results = [];
+        for (const pair of input.pairs) {
+            const session = this.driver.session();
+            try {
+                // Check if both nodes exists and get their categories
+                const checkQuery = await session.run(`
+                    MATCH (p: Metadata {name: $parentName})
+                    MATCH (c:Metadata {name: $childName})
+                    RETURN p.category as parentCategory, c.category as childCategory
+                `, { parentName: pair.parentName, childName: pair.childName });
+                if (checkQuery.records.length === 0) {
+                    throw new Error(`One or both metadata nodes not found`);
+                }
+                const parentCategory = checkQuery.records[0].get('parentCategory');
+                const childCategory = checkQuery.records[0].get('childCategory');
+                if (parentCategory !== childCategory) {
+                    throw new Error(`Category mismatch: parent is ${parentCategory}, child is ${childCategory}`);
+                }
+                // Check if child already has parent
+                const hasParentQuery = await session.run(`
+                    MATCH (c:Metadata {name: $childName})
+                    MATCH (existing:Metadata)-[:PARENT_OF]->(c) 
+                    RETURN existing.name as existingParent
+                `, { childName: pair.childName });
+                if (hasParentQuery.records.length > 0) {
+                    const existingParent = hasParentQuery.records[0].get('existingParent');
+                    throw new Error(`Child already has parent: ${existingParent}`);
+                }
+                // Create the parent-child relationship
+                await session.run(`
+                    MATCH (p:Metadata {name: $parentName})
+                    MATCH (c:Metadata {name: $childName})
+                    MERGE (p)-[:PARENT_OF]->(c)
+                `, { parentName: pair.parentName, childName: pair.childName });
+                results.push({
+                    parentName: pair.parentName,
+                    childName: pair.childName,
+                    status: "created"
+                });
+            }
+            catch (error) {
+                results.push({
+                    parentName: pair.parentName,
+                    childName: pair.childName,
+                    status: "error",
+                    error: error.message
+                });
+            }
+            finally {
+                await session.close();
+            }
+        }
+        let success = "partial success";
+        if (results.every(r => r.status === "created"))
+            success = "success";
+        else if (results.every(r => r.status === "error"))
+            success = "error";
+        return {
+            results: results,
+            success: success
+        };
+    }
     /**
      * Clears database and storage
      */

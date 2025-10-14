@@ -137,3 +137,25 @@ export const MetadataSiblingsForestSchema = z.object({
     forest: z.array(MetadataTreeNodeSchema)
 });
 export type MetadataSiblingsForest = z.infer<typeof MetadataSiblingsForestSchema>; 
+
+export const AddMetadataParentSchema = z.object({
+    pairs: z.array(z.object({
+        parentName: z.string().min(1).max(100).toLowerCase(),
+        childName: z.string().min(1).max(100).toLowerCase()
+    }))
+});
+export type AddMetadataParentInput = z.infer<typeof AddMetadataParentSchema>;
+
+export const MetadataParentChildStatusSchema = z.array(z.object({
+        parentName: z.string().min(1).max(100).toLowerCase(),
+        childName: z.string().min(1).max(100).toLowerCase(),
+        status: z.string(),
+        error: z.string().optional()
+}));
+export type MetadataParentChildStatus = z.infer<typeof MetadataParentChildStatusSchema>;
+
+export const MetadataParentChildSuccess = z.object({
+    results: MetadataParentChildStatusSchema,
+    success: z.enum(["success", "partial success", "error"])
+})
+export type MetadataParentChildSuccess = z.infer<typeof MetadataParentChildSuccess>;

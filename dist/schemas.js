@@ -91,3 +91,19 @@ export const MetadataSiblingsForestSchema = z.object({
     category: z.nativeEnum(MetadataCategory),
     forest: z.array(MetadataTreeNodeSchema)
 });
+export const AddMetadataParentSchema = z.object({
+    pairs: z.array(z.object({
+        parentName: z.string().min(1).max(100).toLowerCase(),
+        childName: z.string().min(1).max(100).toLowerCase()
+    }))
+});
+export const MetadataParentChildStatusSchema = z.array(z.object({
+    parentName: z.string().min(1).max(100).toLowerCase(),
+    childName: z.string().min(1).max(100).toLowerCase(),
+    status: z.string(),
+    error: z.string().optional()
+}));
+export const MetadataParentChildSuccess = z.object({
+    results: MetadataParentChildStatusSchema,
+    success: z.enum(["success", "partial success", "error"])
+});

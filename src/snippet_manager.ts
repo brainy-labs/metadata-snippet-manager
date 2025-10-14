@@ -1,5 +1,6 @@
 import { DB } from "./db.js";
 import { 
+    AddMetadataParentSchema,
     CreateMetadataForestSchema,
     CreateMetadataSchema, 
     CreateMetadataSubtreeSchema, 
@@ -58,7 +59,8 @@ enum ToolName {
     GET_METADATA_FOREST = "get_metadata_forest",
     GET_WHOLE_METADATA_FOREST = "get_whole_metadata_forest",
     GET_METADATA_PATH = "get_metadata_path",
-    GET_METADATA_SIBLINGS_FOREST = "get_metadata_siblings_forest"
+    GET_METADATA_SIBLINGS_FOREST = "get_metadata_siblings_forest",
+    ADD_METADATA_PARENT = "add_metadata_parent"
 }
 
 async function handleTool<T>(
@@ -160,6 +162,7 @@ export const createServer = (db: DB) => {
             { name: ToolName.GET_WHOLE_METADATA_FOREST, description: "Get all metadata in the forest form", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
             { name: ToolName.GET_METADATA_PATH, description: "Get the path from the root to the specified metadata", inputSchema: zodToJsonSchema(GetMetadataPathSchema) as ToolInput},
             { name: ToolName.GET_METADATA_SIBLINGS_FOREST, description: "Get a forest which roots are all siblings of the specified metadata item (metadata item in input included)", inputSchema: zodToJsonSchema(GetMetadataSiblingsForestSchema) as ToolInput },
+            { name: ToolName.ADD_METADATA_PARENT, description: "Add a parent to a specified metadata item (that item can't have other parents and has to be of the same category of the new parent)", inputSchema: zodToJsonSchema(AddMetadataParentSchema) as ToolInput },
         ];
 
         return { tools };
@@ -259,6 +262,9 @@ export const createServer = (db: DB) => {
 
         if (name === ToolName.GET_METADATA_SIBLINGS_FOREST)
             return await handleTool(GetMetadataSiblingsForestSchema, args, db.getMetadataSiblingsForest.bind(db), "Failed to get metadata siblings forest");
+
+        if (name === ToolName.ADD_METADATA_PARENT)
+            return await handleTool(AddMetadataParentSchema, args, db.AddMetadataParent.bind(db), "Failed to add parent to metadata item");
 
         throw new Error(`Unknown tool: ${name}`);
     });

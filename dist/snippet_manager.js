@@ -1,4 +1,4 @@
-import { CreateMetadataForestSchema, CreateMetadataSchema, CreateMetadataSubtreeSchema, CreateMetadataTreeSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, GetMetadataForestSchema, GetMetadataPathSchema, GetMetadataSiblingsForestSchema, GetMetadataSiblingsSchema, GetMetadataTreeSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
+import { AddMetadataParentSchema, CreateMetadataForestSchema, CreateMetadataSchema, CreateMetadataSubtreeSchema, CreateMetadataTreeSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, GetMetadataForestSchema, GetMetadataPathSchema, GetMetadataSiblingsForestSchema, GetMetadataSiblingsSchema, GetMetadataTreeSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -32,6 +32,7 @@ var ToolName;
     ToolName["GET_WHOLE_METADATA_FOREST"] = "get_whole_metadata_forest";
     ToolName["GET_METADATA_PATH"] = "get_metadata_path";
     ToolName["GET_METADATA_SIBLINGS_FOREST"] = "get_metadata_siblings_forest";
+    ToolName["ADD_METADATA_PARENT"] = "add_metadata_parent";
 })(ToolName || (ToolName = {}));
 async function handleTool(schema, args, dbMethod, errorMessage) {
     const validatedArgs = schema.parse(args);
@@ -118,6 +119,7 @@ export const createServer = (db) => {
             { name: ToolName.GET_WHOLE_METADATA_FOREST, description: "Get all metadata in the forest form", inputSchema: zodToJsonSchema(z.object({})) },
             { name: ToolName.GET_METADATA_PATH, description: "Get the path from the root to the specified metadata", inputSchema: zodToJsonSchema(GetMetadataPathSchema) },
             { name: ToolName.GET_METADATA_SIBLINGS_FOREST, description: "Get a forest which roots are all siblings of the specified metadata item (metadata item in input included)", inputSchema: zodToJsonSchema(GetMetadataSiblingsForestSchema) },
+            { name: ToolName.ADD_METADATA_PARENT, description: "Add a parent to a specified metadata item (that item can't have other parents and has to be of the same category of the new parent)", inputSchema: zodToJsonSchema(AddMetadataParentSchema) },
         ];
         return { tools };
     });
@@ -201,6 +203,8 @@ export const createServer = (db) => {
             return await handleTool(GetMetadataPathSchema, args, db.getMetadataPath.bind(db), "Failed to get metadata path");
         if (name === ToolName.GET_METADATA_SIBLINGS_FOREST)
             return await handleTool(GetMetadataSiblingsForestSchema, args, db.getMetadataSiblingsForest.bind(db), "Failed to get metadata siblings forest");
+        if (name === ToolName.ADD_METADATA_PARENT)
+            return await handleTool(AddMetadataParentSchema, args, db.AddMetadataParent.bind(db), "Failed to add parent to metadata item");
         throw new Error(`Unknown tool: ${name}`);
     });
     return { server };
