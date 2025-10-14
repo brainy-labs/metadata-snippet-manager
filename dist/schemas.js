@@ -54,7 +54,8 @@ export const MetadataTreeNodeSchema = z.object({
     children: z.lazy(() => z.array(MetadataTreeNodeSchema)).default([])
 });
 export const GetMetadataTreeSchema = z.object({
-    name: z.string().min(1).max(100).toLowerCase()
+    name: z.string().min(1).max(100).toLowerCase(),
+    maxDepth: z.number().int().default(-1).describe("Max depth of tree. If -1 gets the whole tree")
 });
 export const CreateMetadataTreeSchema = z.object({
     category: z.nativeEnum(MetadataCategory),
@@ -85,7 +86,8 @@ export const MetadataPathSchema = z.object({
     path: z.array(z.string().min(1).max(100).toLowerCase())
 });
 export const GetMetadataSiblingsForestSchema = z.object({
-    name: z.string().min(1).max(100).toLowerCase()
+    name: z.string().min(1).max(100).toLowerCase(),
+    maxDepth: z.number().int().default(-1).describe("Max depth of each sibling tree. If -1 gets the whole trees")
 });
 export const MetadataSiblingsForestSchema = z.object({
     category: z.nativeEnum(MetadataCategory),

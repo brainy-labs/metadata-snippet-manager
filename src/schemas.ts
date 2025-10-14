@@ -79,7 +79,8 @@ export const MetadataTreeNodeSchema: z.ZodType = z.object({
 export type MetadataTreeNode = z.infer<typeof MetadataTreeNodeSchema>;
 
 export const GetMetadataTreeSchema = z.object({
-    name: z.string().min(1).max(100).toLowerCase()
+    name: z.string().min(1).max(100).toLowerCase(),
+    maxDepth: z.number().int().default(-1).describe("Max depth of tree. If -1 gets the whole tree")
 });
 export type GetMetadataTreeInput = z.infer<typeof GetMetadataTreeSchema>;
 
@@ -128,7 +129,8 @@ export const MetadataPathSchema = z.object({
 export type MetadataPath = z.infer<typeof MetadataPathSchema>;
 
 export const GetMetadataSiblingsForestSchema = z.object({
-    name: z.string().min(1).max(100).toLowerCase()
+    name: z.string().min(1).max(100).toLowerCase(),
+    maxDepth: z.number().int().default(-1).describe("Max depth of each sibling tree. If -1 gets the whole trees")
 });
 export type GetMetadataSiblingsForestInput = z.infer<typeof GetMetadataSiblingsForestSchema>;
 

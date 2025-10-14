@@ -360,9 +360,13 @@ export class DB {
             }
 
             const category = rootCheck.records[0].get('category');
+            const maxDepth = input.maxDepth ?? -1;
+
+            // build query in a dinamic way for maxDepth
+            const depthClause = maxDepth === -1 ? '*0..' : `*0..${maxDepth}`;
 
             const result = await session.run(`
-                MATCH path = (root:Metadata {name: $name})-[:PARENT_OF*0..]->(descendant:Metadata)
+                MATCH path = (root:Metadata {name: $name})-[:PARENT_OF${depthClause}]->(descendant:Metadata)
                 WITH root, descendant,
                     [rel in relationships(path) | rel] as rels,
                     length(path) as depth
@@ -670,7 +674,7 @@ export class DB {
             `);
 
             res.records.forEach(item => {
-                roots.names.push({name: item.get('name')});
+                roots.names.push({name: item.get('name'), maxDepth: -1 });
             });
 
             await session.close();
@@ -729,7 +733,7 @@ export class DB {
         // Build the forest by getting each sibling's tree
         const forest: MetadataTreeNode[] = [];
         for (const siblingName of siblingsData.siblings) {
-            const tree = await this.getMetadataTree({ name: siblingName });
+            const tree = await this.getMetadataTree({ name: siblingName, maxDepth: input.maxDepth });
             forest.push(tree.root);
         }
 
@@ -844,14 +848,19 @@ export class DB {
             await session.close();
         }
 
-        const parentTree = await this.getMetadataTree({ name: input.parentName });
-        const childTree = await this.getMetadataTree({ name: input.childName });
+        const parentTree = await this.getMetadataTree({ name: input.parentName, maxDepth: -1 });
+        const childTree = await this.getMetadataTree({ name: input.childName, maxDepth: -1  });
 
         return {
             parentTree: parentTree,
             childTree: childTree
         };
     }
+
+    // TODO: update snippet metadata list
+    // TODO: search metadata (...)
+    // TODO: get all snippets related to a metadata item
+    // TODO: get snippets by metadata intersection
 
     /**
      * Clears database and storage
