@@ -81,7 +81,7 @@ export const GetMetadataPathSchema = z.object({
     name: z.string().min(1).max(100).toLowerCase()
 });
 export const MetadataPathSchema = z.object({
-    cateogory: z.nativeEnum(MetadataCategory),
+    category: z.nativeEnum(MetadataCategory),
     path: z.array(z.string().min(1).max(100).toLowerCase())
 });
 export const GetMetadataSiblingsForestSchema = z.object({

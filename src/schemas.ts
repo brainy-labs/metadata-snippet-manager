@@ -122,7 +122,7 @@ export const GetMetadataPathSchema = z.object({
 export type GetMetadataPathInput = z.infer<typeof GetMetadataPathSchema>;
 
 export const MetadataPathSchema = z.object({
-    cateogory: z.nativeEnum(MetadataCategory),
+    category: z.nativeEnum(MetadataCategory),
     path: z.array(z.string().min(1).max(100).toLowerCase())
 });
 export type MetadataPath = z.infer<typeof MetadataPathSchema>;

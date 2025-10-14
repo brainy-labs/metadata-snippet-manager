@@ -8,6 +8,8 @@ import {
     DeleteMetadataSchema,
     DeleteSnippetsSchema,
     GetMetadataForestSchema,
+    GetMetadataPathSchema,
+    GetMetadataSiblingsForestSchema,
     GetMetadataSiblingsSchema,
     GetMetadataTreeSchema,
     SearchSnippetByNameSchema,
@@ -54,7 +56,9 @@ enum ToolName {
     GET_METADATA_SIBLINGS = "get_metadata_siblings",
     CREATE_METADATA_FOREST = "create_metadata_forest",
     GET_METADATA_FOREST = "get_metadata_forest",
-    GET_WHOLE_METADATA_FOREST = "get_whole_metadata_forest"
+    GET_WHOLE_METADATA_FOREST = "get_whole_metadata_forest",
+    GET_METADATA_PATH = "get_metadata_path",
+    GET_METADATA_SIBLINGS_FOREST = "get_metadata_siblings_forest"
 }
 
 async function handleTool<T>(
@@ -153,7 +157,9 @@ export const createServer = (db: DB) => {
             { name: ToolName.GET_METADATA_SIBLINGS, description: "Get siblings of a metadata (All metadata with the same father).", inputSchema: zodToJsonSchema(GetMetadataSiblingsSchema) as ToolInput },
             { name: ToolName.CREATE_METADATA_FOREST, description: "Create a metadata forest", inputSchema: zodToJsonSchema(CreateMetadataForestSchema) as ToolInput },
             { name: ToolName.GET_METADATA_FOREST, description: "Get a metadata forest by root names", inputSchema: zodToJsonSchema(GetMetadataForestSchema) as ToolInput },
-            { name: ToolName.GET_WHOLE_METADATA_FOREST, description: "Get all metadata in the forest form", inputSchema: zodToJsonSchema(z.object({})) as ToolInput }
+            { name: ToolName.GET_WHOLE_METADATA_FOREST, description: "Get all metadata in the forest form", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
+            { name: ToolName.GET_METADATA_PATH, description: "Get the path from the root to the specified metadata", inputSchema: zodToJsonSchema(GetMetadataPathSchema) as ToolInput},
+            { name: ToolName.GET_METADATA_SIBLINGS_FOREST, description: "Get a forest which roots are all siblings of the specified metadata item (metadata item in input included)", inputSchema: zodToJsonSchema(GetMetadataSiblingsForestSchema) as ToolInput },
         ];
 
         return { tools };
@@ -247,6 +253,12 @@ export const createServer = (db: DB) => {
                 return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to get whole metadata forest' }) }] };
             }
         }
+
+        if (name === ToolName.GET_METADATA_PATH)
+            return await handleTool(GetMetadataPathSchema, args, db.getMetadataPath.bind(db), "Failed to get metadata path");
+
+        if (name === ToolName.GET_METADATA_SIBLINGS_FOREST)
+            return await handleTool(GetMetadataSiblingsForestSchema, args, db.getMetadataSiblingsForest.bind(db), "Failed to get metadata siblings forest");
 
         throw new Error(`Unknown tool: ${name}`);
     });

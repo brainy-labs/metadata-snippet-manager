@@ -601,7 +601,7 @@ export class DB {
                 throw new Error(`Failed to find path to metadata '${input.name}'`);
             const path = result.records[0].get('pathNames');
             return {
-                cateogory: category,
+                category: category,
                 path: path
             };
         }

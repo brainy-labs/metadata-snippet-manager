@@ -707,7 +707,7 @@ export class DB {
             const path = result.records[0].get('pathNames');
 
             return {
-                cateogory: category,
+                category: category,
                 path: path
             }
         } finally {
