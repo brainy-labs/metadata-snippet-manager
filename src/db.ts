@@ -27,7 +27,8 @@ import {
     SearchSnippetByNameInput, 
     Snippet,
     SnippetWithMatchCount,
-    upDateSnippetContentInput, 
+    upDateSnippetContentInput,
+    UpdateSnippetMetadataInput, 
 } from "./schemas.js";
 
 dotenv.config();
@@ -825,16 +826,14 @@ export class DB {
                     parentTree: parentTree,
                     status: "created"
                 });
-            }
-            catch (error: any) {
+            } catch (error: any) {
                 results.push({
                     parentName: pair.parentName,
                     childName: pair.childName,
                     status: "error",
                     error: error.message
                 });
-            }
-            finally {
+            } finally {
                 await session.close();
             }
         }
@@ -895,8 +894,7 @@ export class DB {
         };
     }
 
-    // TODO: update snippet metadata list
-    // TODO: search metadata (...)
+    // TODO: traduzione di snippet
 
     /**
      * Get a list of snippets by a list of metadata. Each snippet has all the input metadata 
@@ -1002,6 +1000,69 @@ export class DB {
                     matchCount: matchCount
                 };
             });
+        } finally {
+            await session.close();
+        }
+    }
+
+    async updateSnippetMetadata(input: UpdateSnippetMetadataInput) : Promise<Snippet> {
+        const session = this.driver.session();
+        try {
+            // Check if snippet exists
+            const snippetCheck = await session.run(
+                `MATCH (s:Snippet {name: $name}) RETURN s`,
+                { name: input.name }
+            );
+
+            if (snippetCheck.records.length === 0) {
+                throw new Error(`Snippet '${input.name}' doesn't exist`);
+            }
+
+            // Check if all metadata exist and belong to the specified category
+            const metadataCheck = await session.run(
+                `MATCH (m:Metadata) WHERE m.name IN $names AND m.category = $category RETURN m.name as name`,
+                {
+                    names: input.metadataNames,
+                    category: input.category
+                }
+            );
+
+            if (metadataCheck.records.length !== input.metadataNames.length) {
+                throw new Error(`Some metadata don't exist or don't match the category`);
+            }
+
+            // Remove all existing metadata relationships
+            await session.run(
+                `MATCH (s:Snippet {name: $name})-[r:HAS_METADATA]->(:Metadata) DELETE r`,
+                { name: input.name }
+            );
+
+            // Create new metadata relationships
+            const result = await session.run(`
+                MATCH (s:Snippet {name: $name})
+                WITH s
+                UNWIND $metadataNames as metadataName
+                MATCH (m:Metadata {name: metadataName})
+                MERGE (s)-[:HAS_METADATA]->(m)
+                WITH s
+                MATCH (s)-[:HAS_METADATA]->(m:Metadata)
+                WITH s, collect(DISTINCT m.category) AS categories, collect(DISTINCT m.name) AS metadataNames
+                RETURN {
+                    name: s.name,
+                    content: s.content,
+                    extension: s.extension,
+                    size: s.size,
+                    createdAt: s.createdAt,
+                    category: head(categories),
+                    metadataNames: metadataNames
+                } AS s
+            `, {
+                name: input.name,
+                metadataNames: input.metadataNames
+            });
+
+            const snippet = result.records[0].get('s');
+            return snippet as Snippet;
         } finally {
             await session.close();
         }

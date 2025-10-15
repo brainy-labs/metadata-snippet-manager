@@ -16,7 +16,8 @@ import {
     GetSnippetsByMetadataSchema,
     PruneMetadataBranchSchema,
     SearchSnippetByNameSchema,
-    UpdateSnippetContentSchema
+    UpdateSnippetContentSchema,
+    UpdateSnippetMetadataSchema
 } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { 
@@ -43,10 +44,10 @@ const ToolInputSchema = ToolSchema.shape.inputSchema;
 type ToolInput = z.infer<typeof ToolInputSchema>;
 
 enum ToolName {
-    TEST_DB = "test_db",
-    CLEAR = "clear",
-    GET_ALL_SNIPPETS = "get_all_snippets",
-    GET_ALL_METADATA = "get_all_metadata",
+    // TEST_DB = "test_db",
+    // CLEAR = "clear",
+    // GET_ALL_SNIPPETS = "get_all_snippets",
+    // GET_ALL_METADATA = "get_all_metadata",
     CREATE_METADATA = "create_metadata",
     CREATE_SNIPPET = "create_snippet",
     DELETE_METADATA = "delete_metadata",
@@ -65,7 +66,8 @@ enum ToolName {
     ADD_METADATA_PARENT = "add_metadata_parent",
     PRUNE_METADATA_BRANCH = "prune_metadata_branch",
     GET_SNIPPETS_BY_METADATA_SUBSET = "get_snippets_by_metadata_subset",
-    GET_SNIPPETS_BY_METADATA_INTERSECTION = "get_snippets_by_metadata_intersection"
+    GET_SNIPPETS_BY_METADATA_INTERSECTION = "get_snippets_by_metadata_intersection",
+    UPDATE_SNIPPET_METADATA = "update_snippet_metadata"
 }
 
 async function handleTool<T>(
@@ -148,12 +150,12 @@ export const createServer = (db: DB) => {
 
     server.setRequestHandler(ListToolsRequestSchema, async () => {
         const tools: Tool[] = [
-            { name: ToolName.TEST_DB, description: "Tests db connection", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
-            { name: ToolName.CLEAR, description: "Clear all data", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
+            // { name: ToolName.TEST_DB, description: "Tests db connection", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
+            // { name: ToolName.CLEAR, description: "Clear all data", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
             { name: ToolName.CREATE_METADATA, description: "Create a metadata. Insert the name, the category (concept or language) and the parent", inputSchema: zodToJsonSchema(CreateMetadataSchema) as ToolInput },
             { name: ToolName.CREATE_SNIPPET, description: "Create a snippet with metadata. All metadata have the same category. The name has to be lowercase, no spaces, ending with the extension (for example .py)", inputSchema: zodToJsonSchema(CreateSnippetSchema) as ToolInput },
-            { name: ToolName.GET_ALL_SNIPPETS, description: "Get all snippets in list form. All snippets have a list of metadata and a category", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
-            { name: ToolName.GET_ALL_METADATA, description: "Get all metadata in list fortm. All metadata have a category and a parent of the same category.", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
+            // { name: ToolName.GET_ALL_SNIPPETS, description: "Get all snippets in list form. All snippets have a list of metadata and a category", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
+            // { name: ToolName.GET_ALL_METADATA, description: "Get all metadata in list fortm. All metadata have a category and a parent of the same category.", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
             { name: ToolName.DELETE_METADATA, description: "Delete some metadata.", inputSchema: zodToJsonSchema(DeleteMetadataSchema) as ToolInput },
             { name: ToolName.DELETE_SNIPPETS, description: "Delete some snippets.", inputSchema: zodToJsonSchema(DeleteSnippetsSchema) as ToolInput },
             { name: ToolName.UPDATE_SNIPPET_CONTENT, description: "Update a snippet content.", inputSchema: zodToJsonSchema(UpdateSnippetContentSchema) as ToolInput },
@@ -171,6 +173,7 @@ export const createServer = (db: DB) => {
             { name: ToolName.PRUNE_METADATA_BRANCH, description: "Remove relationship between a metadata parent and a metadata child. The child becomes a root.", inputSchema: zodToJsonSchema(PruneMetadataBranchSchema) as ToolInput },
             { name: ToolName.GET_SNIPPETS_BY_METADATA_SUBSET, description: "Get a list of snippets that are related to all the given metadata", inputSchema: zodToJsonSchema(GetSnippetsByMetadataSchema) as ToolInput },
             { name: ToolName.GET_SNIPPETS_BY_METADATA_INTERSECTION, description: "Get a list of snippets. Each snippet contains at least one metadata of the given list. The list in output is ordered by cardinality of intersection", inputSchema: zodToJsonSchema(GetSnippetsByMetadataSchema) as ToolInput },
+            { name: ToolName.UPDATE_SNIPPET_METADATA, description: "Replace metadata of a snippet", inputSchema: zodToJsonSchema(UpdateSnippetMetadataSchema) as ToolInput },
         ];
 
         return { tools };
@@ -179,6 +182,7 @@ export const createServer = (db: DB) => {
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const { name, arguments: args} = request.params;
 
+        /*
         if (name === ToolName.TEST_DB) {
             try {
                 const res = await db.test_db_connection();
@@ -186,8 +190,8 @@ export const createServer = (db: DB) => {
             } catch (error: any) {
                 return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'DB test failed' }) }] };
             }
-        }
-
+        }*/
+        /*
         if (name === ToolName.CLEAR) {
             try {
                 await db.clear();
@@ -195,7 +199,7 @@ export const createServer = (db: DB) => {
             } catch (error: any) { 
                 return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to clear DB' }) }] };
             }
-        }
+        }*/
 
         if (name === ToolName.CREATE_METADATA) {
             return await handleTool(CreateMetadataSchema, args, db.createMetadata.bind(db), "Failed to create metadata");
@@ -204,7 +208,7 @@ export const createServer = (db: DB) => {
         if (name === ToolName.CREATE_SNIPPET) {
             return await handleTool(CreateSnippetSchema, args, db.createSnippet.bind(db), "Failed to create snippet");
         }
-
+        /*
         if (name === ToolName.GET_ALL_SNIPPETS) {
             try {
                 const res = await db.getAllSnippets();
@@ -212,8 +216,8 @@ export const createServer = (db: DB) => {
             } catch (error: any) {
                 return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to get snippets' }) }] };
             }
-        }
-
+        }*/
+        /*
         if (name === ToolName.GET_ALL_METADATA) {
             try {
                 const res = await db.getAllMetadata();
@@ -221,7 +225,7 @@ export const createServer = (db: DB) => {
             } catch (error: any) {
                 return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to get metadata' }) }] };
             }
-        }
+        }*/
 
         if (name === ToolName.DELETE_METADATA) 
             return await handleTool(DeleteMetadataSchema, args, db.deleteMetadataByName.bind(db), "Failed to delete metadata");
@@ -282,6 +286,9 @@ export const createServer = (db: DB) => {
 
         if (name === ToolName.GET_SNIPPETS_BY_METADATA_INTERSECTION)
             return await handleTool(GetSnippetsByMetadataSchema, args, db.getSnippetsByMetadataIntersection.bind(db), "Failed to get snippets by the given metadata");
+
+        if (name === ToolName.UPDATE_SNIPPET_METADATA)
+            return await handleTool(UpdateSnippetMetadataSchema, args, db.updateSnippetMetadata.bind(db), "Failed to update metadata o snippet");
 
         throw new Error(`Unknown tool: ${name}`);
     });

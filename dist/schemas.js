@@ -126,3 +126,19 @@ export const SnippetWithMatchCountSchema = z.object({
     snippet: SnippetSchema,
     matchCount: z.number().int().positive()
 });
+export const UpdateSnippetMetadataSchema = z.object({
+    name: z.string().min(1).max(255).toLowerCase(),
+    metadataNames: z.array(z.string().min(1).toLowerCase()).min(1),
+    category: z.nativeEnum(MetadataCategory)
+}).refine((data) => {
+    const parts = data.name.split('.');
+    return parts.length > 1;
+}, {
+    message: "Il nome deve contenere un'estensione",
+    path: ["name"]
+});
+export const GetSnippetsByDateSchema = z.object({
+    date: z.date().optional(),
+    operator: z.enum(['lte', 'gte', 'eq']).default('lte').describe("Comparison operator: lte (<=), gte (>=), eq (=)"),
+    limit: z.number().int().positive().default(10).describe("Maximum number of snippets to return")
+}).optional();
