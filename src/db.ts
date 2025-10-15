@@ -14,6 +14,7 @@ import {
     GetMetadataSiblingsForestInput, 
     GetMetadataSiblingsInput, 
     GetMetadataTreeInput,
+    GetSnippetsByMetadataInput,
     Metadata, 
     MetadataParentChildStatus, 
     MetadataParentChildSuccess, 
@@ -25,6 +26,7 @@ import {
     PruneMetadataNewTrees,
     SearchSnippetByNameInput, 
     Snippet,
+    SnippetWithMatchCount,
     upDateSnippetContentInput, 
 } from "./schemas.js";
 import { ChildProcess } from "child_process";
@@ -817,7 +819,7 @@ export class DB {
        
     }
 
-    async pruneMetadataBranch (input: PruneMetadataBranchInput) : Promise<PruneMetadataNewTrees> {
+    async pruneMetadataBranch(input: PruneMetadataBranchInput) : Promise<PruneMetadataNewTrees> {
         const session = this.driver.session();
         try {
             // Check if both node exists
@@ -859,8 +861,103 @@ export class DB {
 
     // TODO: update snippet metadata list
     // TODO: search metadata (...)
-    // TODO: get all snippets related to a metadata item
-    // TODO: get snippets by metadata intersection
+
+    async getSnippetByMetadataSubset(input: GetSnippetsByMetadataInput) : Promise<Snippet[]> {
+        const session: Session = this.driver.session();
+        try {
+            // Verify all metadata exists and belong to the same category
+            const metadataCheck = await session.run(`
+                MATCH (m:Metadata)
+                WHERE m.name IN $metadataNames AND m.category = $category
+                RETURN count(m) as count
+            `, { metadataNames: input.metadataNames, category: input.category });
+
+            const foundCount = metadataCheck.records[0].get('count').toNumber();
+            if (foundCount !== input.metadataNames.length) {
+                throw new Error(`Some metadata don't exists or don't match the category`);
+            }
+
+            // Find the snippets that have ALL the specified metadata
+            const result = await session.run(`
+                MATCH (s:Snippet)-[:HAS_METADATA]->(m:Metadata)
+                WHERE m.name IN $metadataNames
+                WITH s, collect(DISTINCT m.name) as matchedMetadata
+                WHERE size(matchedMetadata) = $requiredCount
+                MATCH (s)-[:HAS_METADATA]->(allMeta:Metadata)
+                WITH s, collect(DISTINCT allMeta.category) as categories,
+                    collect(DISTINCT allMeta.name) as allMetadataNames
+                RETURN {
+                    name: s.name,
+                    content: s.content,
+                    extension: s.extension,
+                    size: s.size,
+                    createdAt: s.createdAt,
+                    category: head(categories),
+                    metadataNames: allMetadataNames
+                } AS snippet
+            `, { metadataNames: input.metadataNames, requiredCount: input.metadataNames.length });
+
+            return result.records.map(record => {
+                const snippet = record.get('snippet');
+                return snippet as Snippet;
+            });
+        } finally {
+            await session.close();
+        }
+    }
+
+    async getSnippetsByMetadataIntersection(input: GetSnippetsByMetadataInput) : Promise<SnippetWithMatchCount[]>{
+        const session: Session = this.driver.session();
+        try {
+            // Verify all metadata exists and belong to the same category
+            const metadataCheck = await session.run(`
+                MATCH (m:Metadata)
+                WHERE m.name IN $metadataNames AND m.category = $category
+                RETURN count(m) as count
+            `, { metadataNames: input.metadataNames, category: input.category });
+
+            const foundCount = metadataCheck.records[0].get('count').toNumber();
+            if (foundCount !== input.metadataNames.length) {
+                throw new Error(`Some metadata don't exists or don't match the category`);
+            }
+
+            // Find snippets that have at least one of the specified metadata
+            // and count how many matches each snippet has
+            const result = await session.run(`
+                MATCH (s:Snippet)-[:HAS_METADATA]->(m:Metadata)
+                WHERE m.name IN $metadataNames
+                WITH s, collect(DISTINCT m.name) as matchedMetadata
+                WITH s, matchedMetadata, size(matchedMetadata) as matchCount
+                MATCH (s)-[:HAS_METADATA]->(allMeta:Metadata)
+                WITH s, matchCount, collect(DISTINCT allMeta.category) as categories,
+                    collect(DISTINCT allMeta.name) as allMetadataNames
+                RETURN {
+                    name: s.name,
+                    content: s.content,
+                    extension: s.extension,
+                    size: s.size,
+                    createdAt: s.createdAt,
+                    category: head(categories),
+                    metadataNames: allMetadataNames
+                } AS snippet, 
+                matchCount
+                ORDER BY matchCount DESC
+            `, {
+                metadataNames: input.metadataNames
+            });
+
+            return result.records.map(record => {
+                const snippet = record.get('snippet');
+                const matchCount = record.get('matchCount').toNumber();
+                return {
+                    snippet: snippet as Snippet,
+                    matchCount: matchCount
+                };
+            });
+        } finally {
+            await session.close();
+        }
+    }
 
     /**
      * Clears database and storage

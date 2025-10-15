@@ -1,4 +1,4 @@
-import { AddMetadataParentSchema, CreateMetadataForestSchema, CreateMetadataSchema, CreateMetadataSubtreeSchema, CreateMetadataTreeSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, GetMetadataForestSchema, GetMetadataPathSchema, GetMetadataSiblingsForestSchema, GetMetadataSiblingsSchema, GetMetadataTreeSchema, PruneMetadataBranchSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
+import { AddMetadataParentSchema, CreateMetadataForestSchema, CreateMetadataSchema, CreateMetadataSubtreeSchema, CreateMetadataTreeSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, GetMetadataForestSchema, GetMetadataPathSchema, GetMetadataSiblingsForestSchema, GetMetadataSiblingsSchema, GetMetadataTreeSchema, GetSnippetsByMetadataSchema, PruneMetadataBranchSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -34,6 +34,8 @@ var ToolName;
     ToolName["GET_METADATA_SIBLINGS_FOREST"] = "get_metadata_siblings_forest";
     ToolName["ADD_METADATA_PARENT"] = "add_metadata_parent";
     ToolName["PRUNE_METADATA_BRANCH"] = "prune_metadata_branch";
+    ToolName["GET_SNIPPETS_BY_METADATA_SUBSET"] = "get_snippets_by_metadata_subset";
+    ToolName["GET_SNIPPETS_BY_METADATA_INTERSECTION"] = "get_snippets_by_metadata_intersection";
 })(ToolName || (ToolName = {}));
 async function handleTool(schema, args, dbMethod, errorMessage) {
     const validatedArgs = schema.parse(args);
@@ -122,6 +124,8 @@ export const createServer = (db) => {
             { name: ToolName.GET_METADATA_SIBLINGS_FOREST, description: "Get a forest which roots are all siblings of the specified metadata item (metadata item in input included)", inputSchema: zodToJsonSchema(GetMetadataSiblingsForestSchema) },
             { name: ToolName.ADD_METADATA_PARENT, description: "Add a parent to a specified metadata item (that item can't have other parents and has to be of the same category of the new parent)", inputSchema: zodToJsonSchema(AddMetadataParentSchema) },
             { name: ToolName.PRUNE_METADATA_BRANCH, description: "Remove relationship between a metadata parent and a metadata child. The child becomes a root.", inputSchema: zodToJsonSchema(PruneMetadataBranchSchema) },
+            { name: ToolName.GET_SNIPPETS_BY_METADATA_SUBSET, description: "Get a list of snippets that are related to all the given metadata", inputSchema: zodToJsonSchema(GetSnippetsByMetadataSchema) },
+            { name: ToolName.GET_SNIPPETS_BY_METADATA_INTERSECTION, description: "Get a list of snippets. Each snippet contains at least one metadata of the given list. The list in output is ordered by cardinality of intersection", inputSchema: zodToJsonSchema(GetSnippetsByMetadataSchema) },
         ];
         return { tools };
     });
@@ -209,6 +213,10 @@ export const createServer = (db) => {
             return await handleTool(AddMetadataParentSchema, args, db.addMetadataParent.bind(db), "Failed to add parent to metadata item");
         if (name === ToolName.PRUNE_METADATA_BRANCH)
             return await handleTool(PruneMetadataBranchSchema, args, db.pruneMetadataBranch.bind(db), "Failed to prune branch");
+        if (name === ToolName.GET_SNIPPETS_BY_METADATA_SUBSET)
+            return await handleTool(GetSnippetsByMetadataSchema, args, db.getSnippetByMetadataSubset.bind(db), "Failed to get snippets by the given metadata");
+        if (name === ToolName.GET_SNIPPETS_BY_METADATA_INTERSECTION)
+            return await handleTool(GetSnippetsByMetadataSchema, args, db.getSnippetsByMetadataIntersection.bind(db), "Failed to get snippets by the given metadata");
         throw new Error(`Unknown tool: ${name}`);
     });
     return { server };

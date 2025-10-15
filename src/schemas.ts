@@ -173,3 +173,15 @@ export const PruneMetadataNewTreesSchema = z.object({
     childTree: MetadataTreeNodeSchema
 });
 export type PruneMetadataNewTrees = z.infer<typeof PruneMetadataNewTreesSchema>;
+
+export const GetSnippetsByMetadataSchema= z.object({
+    metadataNames: z.array(z.string().min(1).max(100).toLowerCase()),
+    category: z.nativeEnum(MetadataCategory)
+});
+export type GetSnippetsByMetadataInput = z.infer<typeof GetSnippetsByMetadataSchema>;
+
+export const SnippetWithMatchCountSchema = z.object({
+    snippet: SnippetSchema,
+    matchCount: z.number().int().positive()
+});
+export type SnippetWithMatchCount = z.infer<typeof SnippetWithMatchCountSchema>;
