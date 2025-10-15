@@ -29,8 +29,6 @@ import {
     SnippetWithMatchCount,
     upDateSnippetContentInput, 
 } from "./schemas.js";
-import { ChildProcess } from "child_process";
-import { check } from "zod/v4";
 
 dotenv.config();
 
@@ -352,6 +350,7 @@ export class DB {
     async getMetadataTree(input: GetMetadataTreeInput): Promise<MetadataTreeNode> {
         const session = this.driver.session();
         try{
+            // Check if root exists
             const rootCheck = await session.run(`
                 MATCH (m:Metadata {name: $name})
                 RETURN m.category as category
@@ -387,6 +386,7 @@ export class DB {
 
             const nodes = result.records[0].get('nodes');
 
+            // Build hierachic schema from a list of records
             const nodeMap = new Map<string, MetadataTreeNode>();
 
             nodes.forEach((node: any) => {
@@ -444,6 +444,7 @@ export class DB {
 
             const flatNodes: Array<treeNode> = [];
 
+            // Flat nodes to insert into database
             const flatten = (node: MetadataTreeNode, parentName: string | null = null) => {
                 flatNodes.push({
                     name: node.name,
@@ -461,6 +462,7 @@ export class DB {
                 throw new Error('Duplicate names found in subtree');
             }
 
+            // Check if metadata already exist
             const existingCheck = await session.run(`
                 MATCH (m:Metadata)
                 WHERE m.name IN $names
@@ -472,6 +474,7 @@ export class DB {
                 throw new Error(`Some metadata already exists: ${existing.join(', ')}`);
             }
 
+            // Insert nodes
             await session.run(`
                 UNWIND $nodes as node
                 MERGE (m:Metadata {name: node.name, category: $category})
@@ -505,6 +508,7 @@ export class DB {
     }> {
         const session = this.driver.session();
         try {
+            // Check if root exists
             const rootCheck = await session.run(`
                 MATCH (m:Metadata {name: $rootName})
                 RETURN m.category as category
@@ -516,6 +520,7 @@ export class DB {
 
             const category = rootCheck.records[0].get('category');
 
+            // flat nodes to insert into db
             const flatNodes: Array<{ name: string; parentName: string }> = [];
 
             const flatten = (node: MetadataTreeNode, parentName: string) => {
@@ -535,6 +540,7 @@ export class DB {
                 throw new Error('Duplicate names found in subtree');
             }
 
+            // Check if metadata already exist
             const existingCheck = await session.run(`
                 MATCH (m:Metadata)
                 WHERE m.name IN $names
@@ -546,6 +552,7 @@ export class DB {
                 throw new Error(`Some metadata already exists: ${existing.join(', ')}`);
             }
 
+            // insert nodes
             await session.run(`
                 UNWIND $nodes as node
                 CREATE (m:Metadata {name: node.name, category: $category})
@@ -576,6 +583,7 @@ export class DB {
     async getMetadataSiblings(input: GetMetadataSiblingsInput) : Promise<MetadataSiblingsList> {
         const session: Session = this.driver.session();
         try{
+            // Check if the given metadata exists and get the parent (if exists)
             const siblingCheck = await session.run(`
                 MATCH (m:Metadata)
                 WHERE m.name = $name
@@ -591,9 +599,10 @@ export class DB {
             const parent = siblingCheck.records[0].get('p');
 
             let siblings: string[] = [];
+            // If parent doesn't exist, the list has only an item: the metadata in input
             if (parent === null) {
                 siblings.push(mainSib.name);
-            } else{
+            } else{ // else get all the metadata with the obtained parent
                 const res = await session.run(`
                     MATCH (parent:Metadata)-[:PARENT_OF]->(m:Metadata)
                     WHERE parent.name = $parent
@@ -623,6 +632,7 @@ export class DB {
     async createMetadataForest(input: CreateMetadataForestInput) {
         const results: Array<{name: string, status: string, error?: string}> = [];
 
+        // Just loop on the createMetadataTree function
         for (const tree of input.forest) {
             try{
                 await this.createMetadataTree(tree);
@@ -668,6 +678,8 @@ export class DB {
     async getWholeMetadataForest(): Promise<MetadataTreeNode[]> {
         const session = this.driver.session();
         let roots: GetMetadataForestInput = { names: [] };
+
+        // Get all roots
         try {
             const res = await session.run(`
                 MATCH (m:Metadata)
@@ -689,6 +701,11 @@ export class DB {
         return wholeForest;
     }
 
+    /**
+     * Get the path to the metadata in input.  
+     * @param input a metadata name
+     * @returns an ordered list. The first item is the root, the last item is the metadata in input.
+     */
     async getMetadataPath(input: GetMetadataPathInput): Promise<MetadataPath> {
         const session = this.driver.session();
         try {
@@ -728,6 +745,11 @@ export class DB {
         }
     }
 
+    /**
+     * Get a tree for each sibling of the specified metadata item (included its tree).
+     * @param input a metadata name
+     * @returns a forest of metadata which roots are the siblings of the metadata item. If a given metadata is a leaf, the tree has only the root
+     */
     async getMetadataSiblingsForest(input: GetMetadataSiblingsForestInput): Promise<MetadataSiblingsForest> {
         // Get siblings of the input metadata
         const siblingsData = await this.getMetadataSiblings({ name: input.name });
@@ -745,6 +767,11 @@ export class DB {
         };
     }
 
+    /**
+     * Add a parent to a metadata item (if it doesn't have any parent).
+     * @param input the metadata item that will be parent and the metadata item that has no parent
+     * @returns 
+     */
     async addMetadataParent(input: AddMetadataParentInput) : Promise<MetadataParentChildSuccess> {
         const results: MetadataParentChildStatus = [];
 
@@ -789,9 +816,13 @@ export class DB {
                     MERGE (p)-[:PARENT_OF]->(c)
                 `, { parentName: pair.parentName, childName: pair.childName });
 
+                // Get the parent tree
+                const parentTree = await this.getMetadataTree({ name: pair.parentName, maxDepth: -1 });
+
                 results.push({
                     parentName: pair.parentName,
                     childName: pair.childName,
+                    parentTree: parentTree,
                     status: "created"
                 });
             }
@@ -819,6 +850,11 @@ export class DB {
        
     }
 
+    /**
+     * Break the kinship bond between a parent metadata and a child metadata 
+     * @param input the names of the metadata child and parent
+     * @returns the new trees. The ex-parent tree and the ex-child tree.
+     */
     async pruneMetadataBranch(input: PruneMetadataBranchInput) : Promise<PruneMetadataNewTrees> {
         const session = this.driver.session();
         try {
@@ -862,6 +898,12 @@ export class DB {
     // TODO: update snippet metadata list
     // TODO: search metadata (...)
 
+    /**
+     * Get a list of snippets by a list of metadata. Each snippet has all the input metadata 
+     * @param input a list of metadata names and a category
+     * @returns a list of snippets having all the metadata in input. 
+     *          The list is sorted in ascending order based on the length of the snippets' metadata lists
+     */
     async getSnippetByMetadataSubset(input: GetSnippetsByMetadataInput) : Promise<Snippet[]> {
         const session: Session = this.driver.session();
         try {
@@ -886,6 +928,7 @@ export class DB {
                 MATCH (s)-[:HAS_METADATA]->(allMeta:Metadata)
                 WITH s, collect(DISTINCT allMeta.category) as categories,
                     collect(DISTINCT allMeta.name) as allMetadataNames
+                ORDER BY size(allMetadataNames) ASC
                 RETURN {
                     name: s.name,
                     content: s.content,
@@ -906,6 +949,11 @@ export class DB {
         }
     }
 
+    /**
+     * Get a list of snippets by a metadata list. Each snippet's metadata list has a non-empty intersection with the given metadata list. 
+     * @param input a metadata names list and a category.
+     * @returns A list of snippets sorted in a descending order based on the cardinality of intersection with the metadata list in input.
+     */
     async getSnippetsByMetadataIntersection(input: GetSnippetsByMetadataInput) : Promise<SnippetWithMatchCount[]>{
         const session: Session = this.driver.session();
         try {

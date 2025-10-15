@@ -102,6 +102,7 @@ export const AddMetadataParentSchema = z.object({
 export const MetadataParentChildStatusSchema = z.array(z.object({
     parentName: z.string().min(1).max(100).toLowerCase(),
     childName: z.string().min(1).max(100).toLowerCase(),
+    parentTree: MetadataTreeNodeSchema.optional(),
     status: z.string(),
     error: z.string().optional()
 }));
