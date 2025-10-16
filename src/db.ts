@@ -16,6 +16,7 @@ import {
     GetMetadataTreeInput,
     GetSnippetsByMetadataInput,
     Metadata, 
+    MetadataCategory, 
     MetadataParentChildStatus, 
     MetadataParentChildSuccess, 
     MetadataPath, 
@@ -24,6 +25,7 @@ import {
     MetadataTreeNode,
     PruneMetadataBranchInput,
     PruneMetadataNewTrees,
+    RenameMetadataSchema,
     SearchSnippetByNameInput, 
     Snippet,
     SnippetWithMatchCount,
@@ -64,12 +66,32 @@ export class DB {
         const session = this.driver.session();
         try {
             await this.create_field_constraint(session, "Snippet", "snippet_name_unique", "name");
-            await this.create_field_constraint(session, "Metadata", "metadata_name_unique", "name");
+            await this.create_field_constraint(session, "Metadata", "metadata_name_category_unique", "name", "category");
             await this.create_index(session, "Metadata", "metadata_category", "category");
         } finally {
             await session.close();
         }
     }
+
+    /* ---------- Helpers ---------- */
+    /**
+     * Resolve a unique metadata category by name. If multiple categories exist for the name
+     * throws an error asking the caller to disambiguate by providing category.
+     * If categoryParam is provided, it is returned without further checks.
+     */
+    private async resolveCategoryForName(session: Session, name: string, categoryParam?: MetadataCategory): Promise<MetadataCategory> {
+        if (categoryParam) return categoryParam;
+        const res = await session.run(
+            `MATCH (m:Metadata {name: $name}) RETURN collect(DISTINCT m.category) AS cats`,
+            { name }
+        );
+        const cats = res.records[0].get('cats');
+        if (!cats || cats.length === 0) throw new Error(`Metadata '${name}' not found`);
+        if (cats.length > 1) throw new Error(`Multiple metadata with name '${name}' found in different categories. Please provide category explicitly.`);
+        return cats[0];
+    }
+
+    /* ---------- End helpers ---------- */
 
     /**
      * 
@@ -79,23 +101,23 @@ export class DB {
     async createMetadata(input: CreateMetadataInput): Promise<Metadata> {
         const session = this.driver.session();
         try {
-            // Check if metadata already exists
+            // Check if metadata already exists (name+category)
             const res = await session.run(`
-                MATCH (m: Metadata)
-                WHERE m.name = $name
+                MATCH (m:Metadata)
+                WHERE m.name = $name AND m.category = $category
                 RETURN m
-            `, {name: input.name});
+            `, { name: input.name, category: input.category });
             if (res.records.length > 0) throw new Error(`Name already taken`);
 
             // If there is a parent, verify it is from the same category
             if (input.parentName) {
                 const parentCheck = await session.run(`
-                    MATCH (p:Metadata {name: $parentName})
+                    MATCH (p:Metadata {name: $parentName, category: $category})
                     RETURN p.category as category
-                `, { parentName: input.parentName });
+                `, { parentName: input.parentName, category: input.category });
 
                 if (parentCheck.records.length === 0){
-                    throw new Error(`Parent metadata '${input.parentName}' not found`);
+                    throw new Error(`Parent metadata '${input.parentName}' not found in category '${input.category}'`);
                 }
 
                 const parentCategory = parentCheck.records[0].get('category');
@@ -108,10 +130,9 @@ export class DB {
 
             // Create metadata and parent relation if exists
             const result = await session.run(`
-                MERGE (m:Metadata {name: $name})
-                ON CREATE SET m.category = $category
+                MERGE (m:Metadata {name: $name, category: $category})
                 WITH m
-                OPTIONAL MATCH (p:Metadata {name: $parentName})
+                OPTIONAL MATCH (p:Metadata {name: $parentName, category: $category})
                 WHERE $parentName IS NOT NULL
                 FOREACH (_ IN CASE WHEN p IS NOT NULL THEN [1] ELSE [] END |
                     MERGE (p)-[:PARENT_OF]->(m)
@@ -140,8 +161,17 @@ export class DB {
      */
     async deleteMetadataByName(input: DeleteMetadataInput): Promise<void> {
         const session = this.driver.session();
+        const deleteParams = input.metadata.map(item => ({
+            name: item.name,
+            category: item.category
+        }));
+
         try{
-            const res = await session.run(`UNWIND $names as name MATCH (m:Metadata {name: name}) DETACH DELETE m`, { names: input.names});
+            await session.run(`
+                UNWIND $items as item
+                MATCH (m:Metadata {name: item.name, category: item.category})
+                DETACH DELETE m
+            `, { items: deleteParams });
         } finally {
             await session.close();
         }
@@ -172,7 +202,7 @@ export class DB {
             const res = await session.run(`MATCH (s:Snippet) WHERE s.name = $name RETURN s`, {name: input.name});
             if (res.records.length > 0) throw new Error(`Name already taken`);
 
-            // Check metadata existence
+            // Check metadata existence (ensures metadata in the provided category exist)
             const metadataCheck = await session.run(`MATCH (m:Metadata) WHERE m.name IN $names AND m.category = $category RETURN m.name as name`, 
             { 
                 names: input.metadataNames,
@@ -180,10 +210,10 @@ export class DB {
             });
 
             if (metadataCheck.records.length !== input.metadataNames.length) {
-                throw new Error(`Some metadata names don't exists`);
+                throw new Error(`Some metadata names don't exists in category '${input.category}'`);
             }
 
-            // Insert snippet in database
+            // Insert snippet in database and link with metadata (matching by name+category)
             const result = await session.run(`
                 CREATE (s:Snippet {
                     name: $name,
@@ -194,7 +224,7 @@ export class DB {
                 })
                 WITH s
                 UNWIND $metadataNames as metadataName
-                MATCH (m: Metadata {name: metadataName})
+                MATCH (m: Metadata {name: metadataName, category: $category})
                 MERGE (s)-[:HAS_METADATA]->(m)
                 RETURN s 
             `, {
@@ -202,7 +232,8 @@ export class DB {
                 content: input.content,
                 extension: input.extension,
                 size: input.content.length,
-                metadataNames: input.metadataNames
+                metadataNames: input.metadataNames,
+                category: input.category
             });
 
             const record = result.records[0];
@@ -351,24 +382,16 @@ export class DB {
     async getMetadataTree(input: GetMetadataTreeInput): Promise<MetadataTreeNode> {
         const session = this.driver.session();
         try{
-            // Check if root exists
-            const rootCheck = await session.run(`
-                MATCH (m:Metadata {name: $name})
-                RETURN m.category as category
-            `, { name: input.name });
+            // Resolve category (if not provided, ensure unique by name)
+            const category = await this.resolveCategoryForName(session, input.name, (input as any).category);
 
-            if (rootCheck.records.length === 0) {
-                throw new Error(`Metadata '${input.name}' not found`);
-            }
-
-            const category = rootCheck.records[0].get('category');
             const maxDepth = input.maxDepth ?? -1;
 
             // build query in a dinamic way for maxDepth
             const depthClause = maxDepth === -1 ? '*0..' : `*0..${maxDepth}`;
 
             const result = await session.run(`
-                MATCH path = (root:Metadata {name: $name})-[:PARENT_OF${depthClause}]->(descendant:Metadata)
+                MATCH path = (root:Metadata {name: $name, category: $category})-[:PARENT_OF${depthClause}]->(descendant:Metadata {category: $category})
                 WITH root, descendant,
                     [rel in relationships(path) | rel] as rels,
                     length(path) as depth
@@ -383,7 +406,7 @@ export class DB {
                     END
                 }) as nodes
                 RETURN nodes
-            `, { name: input.name });
+            `, { name: input.name, category });
 
             const nodes = result.records[0].get('nodes');
 
@@ -397,12 +420,12 @@ export class DB {
                 });
             });
 
-            let root: MetadataTreeNode | null = null;
+            let rootNode: MetadataTreeNode | null = null;
             nodes.forEach((node: any) => {
                 const currentNode = nodeMap.get(node.name)!;
 
                 if (node.parentName === null) {
-                    root = currentNode;
+                    rootNode = currentNode;
                 } else {
                     const parent = nodeMap.get(node.parentName);
                     if (parent) {
@@ -411,13 +434,13 @@ export class DB {
                 }
             });
 
-            if (!root) {
+            if (!rootNode) {
                 throw new Error(`Failed to build tree structure`);
             }
             
             return {
                 category: category,
-                root: root
+                root: rootNode
             };
         } finally {
             await session.close();
@@ -433,12 +456,12 @@ export class DB {
         const session = this.driver.session();
         try {
             const rootCheck = await session.run(`
-                MATCH (m:Metadata {name: $name})
+                MATCH (m:Metadata {name: $name, category: $category})
                 RETURN m
-            `, { name: input.root.name });
+            `, { name: input.root.name, category: input.category });
 
             if (rootCheck.records.length > 0) {
-                throw new Error(`Root metadata '${input.root.name}' already exists`);
+                throw new Error(`Root metadata '${input.root.name}' already exists in category '${input.category}'`);
             }
 
             type treeNode = { name: string;  parentName: string | null };
@@ -452,7 +475,7 @@ export class DB {
                     parentName: parentName
                 });
 
-                node.children.forEach((child: treeNode) => flatten(child, node.name));
+                node.children.forEach((child: any) => flatten(child, node.name));
             };
 
             flatten(input.root);
@@ -463,25 +486,25 @@ export class DB {
                 throw new Error('Duplicate names found in subtree');
             }
 
-            // Check if metadata already exist
+            // Check if metadata already exist in the same category
             const existingCheck = await session.run(`
                 MATCH (m:Metadata)
-                WHERE m.name IN $names
+                WHERE m.name IN $names AND m.category = $category
                 RETURN m.name as name
-            `, { names: names });
+            `, { names: names, category: input.category });
 
             if (existingCheck.records.length > 0) {
                 const existing = existingCheck.records.map(r => r.get('name'));
-                throw new Error(`Some metadata already exists: ${existing.join(', ')}`);
+                throw new Error(`Some metadata already exists in category '${input.category}': ${existing.join(', ')}`);
             }
 
-            // Insert nodes
+            // Insert nodes (merge by name+category)
             await session.run(`
                 UNWIND $nodes as node
                 MERGE (m:Metadata {name: node.name, category: $category})
                 WITH m, node
                 WHERE node.parentName IS NOT NULL
-                MATCH (p:Metadata {name: node.parentName})
+                MATCH (p:Metadata {name: node.parentName, category: $category})
                 MERGE (p)-[:PARENT_OF]->(m)
             `, { 
                 nodes: flatNodes,
@@ -509,17 +532,21 @@ export class DB {
     }> {
         const session = this.driver.session();
         try {
-            // Check if root exists
+            // Resolve root and its category (ensure unique)
             const rootCheck = await session.run(`
                 MATCH (m:Metadata {name: $rootName})
-                RETURN m.category as category
+                RETURN collect(DISTINCT m.category) AS cats
             `, { rootName: input.rootName });
 
-            if (rootCheck.records.length === 0) {
+            const cats = rootCheck.records[0].get('cats');
+            if (!cats || cats.length === 0) {
                 throw new Error(`Root metadata '${input.rootName}' not found`);
             }
+            if (cats.length > 1) {
+                throw new Error(`Multiple metadata with name '${input.rootName}' found in different categories. Please provide category.`);
+            }
 
-            const category = rootCheck.records[0].get('category');
+            const category = cats[0];
 
             // flat nodes to insert into db
             const flatNodes: Array<{ name: string; parentName: string }> = [];
@@ -541,16 +568,16 @@ export class DB {
                 throw new Error('Duplicate names found in subtree');
             }
 
-            // Check if metadata already exist
+            // Check if metadata already exist in the same category
             const existingCheck = await session.run(`
                 MATCH (m:Metadata)
-                WHERE m.name IN $names
+                WHERE m.name IN $names AND m.category = $category
                 RETURN m.name as name
-            `, { names: names });
+            `, { names: names, category });
 
             if (existingCheck.records.length > 0) {
                 const existing = existingCheck.records.map(r => r.get('name'));
-                throw new Error(`Some metadata already exists: ${existing.join(', ')}`);
+                throw new Error(`Some metadata already exists in category '${category}': ${existing.join(', ')}`);
             }
 
             // insert nodes
@@ -558,7 +585,7 @@ export class DB {
                 UNWIND $nodes as node
                 CREATE (m:Metadata {name: node.name, category: $category})
                 WITH m, node
-                MATCH (p:Metadata {name: node.parentName})
+                MATCH (p:Metadata {name: node.parentName, category: $category})
                 MERGE (p)-[:PARENT_OF]->(m)
             `, {
                nodes: flatNodes,
@@ -584,16 +611,18 @@ export class DB {
     async getMetadataSiblings(input: GetMetadataSiblingsInput) : Promise<MetadataSiblingsList> {
         const session: Session = this.driver.session();
         try{
+            // Resolve category (if ambiguous, requester must provide category)
+            const category = await this.resolveCategoryForName(session, input.name, (input as any).category);
+
             // Check if the given metadata exists and get the parent (if exists)
             const siblingCheck = await session.run(`
-                MATCH (m:Metadata)
-                WHERE m.name = $name
-                OPTIONAL MATCH (parent:Metadata)-[:PARENT_OF]->(m)
+                MATCH (m:Metadata {name: $name, category: $category})
+                OPTIONAL MATCH (parent:Metadata {category: $category})-[:PARENT_OF]->(m)
                 RETURN m, parent.name AS p 
-            `, { name: input.name });
+            `, { name: input.name, category });
 
             if (siblingCheck.records.length === 0) {
-                throw new Error(`Metadata ${input.name} doesn't exist`);
+                throw new Error(`Metadata ${input.name} doesn't exist in category '${category}'`);
             }
 
             const mainSib = siblingCheck.records[0].get('m').properties;
@@ -605,10 +634,9 @@ export class DB {
                 siblings.push(mainSib.name);
             } else{ // else get all the metadata with the obtained parent
                 const res = await session.run(`
-                    MATCH (parent:Metadata)-[:PARENT_OF]->(m:Metadata)
-                    WHERE parent.name = $parent
+                    MATCH (parent:Metadata {name: $parent, category: $category})-[:PARENT_OF]->(m:Metadata {category: $category})
                     RETURN m.name as name
-                `, { parent: parent });
+                `, { parent: parent, category });
 
                 siblings = res.records.map(record => {
                     const name = record.get('name');
@@ -685,11 +713,11 @@ export class DB {
             const res = await session.run(`
                 MATCH (m:Metadata)
                 WHERE NOT (m)<-[:PARENT_OF]-(:Metadata)
-                RETURN m.name as name
+                RETURN m.name as name, m.category as category
             `);
 
             res.records.forEach(item => {
-                roots.names.push({name: item.get('name'), maxDepth: -1 });
+                roots.names.push({name: item.get('name'), category: item.get('category'), maxDepth: -1 } as any);
             });
 
             await session.close();
@@ -710,30 +738,22 @@ export class DB {
     async getMetadataPath(input: GetMetadataPathInput): Promise<MetadataPath> {
         const session = this.driver.session();
         try {
-            // Check if metadata exists
-            const metadataCheck = await session.run(`
-                MATCH (m:Metadata {name: $name})
-                RETURN m.category as category
-            `, { name: input.name });
-
-            if (metadataCheck.records.length === 0) 
-                throw new Error(`Metadata '${input.name}' not found`);
-
-            const category = metadataCheck.records[0].get('category');
+            // Resolve category (if not provided)
+            const category : MetadataCategory = await this.resolveCategoryForName(session, input.name, (input as any).category);
 
             // Get path from the root to the target metadata
             const result = await session.run(`
-                MATCH path = (root:Metadata)-[:PARENT_OF*0..]->(target:Metadata {name: $name})
-                WHERE NOT (root)<-[:PARENT_OF]-(:Metadata)
+                MATCH path = (root:Metadata {category: $category})-[:PARENT_OF*0..]->(target:Metadata {name: $name, category: $category})
+                WHERE NOT (root)<-[:PARENT_OF]-(:Metadata {category: $category})
                 WITH path, length(path) as pathLength
                 ORDER BY pathLength DESC
                 LIMIT 1
                 WITH [node in nodes(path) | node.name] as pathNames
                 RETURN pathNames
-            `, { name: input.name });
+            `, { name: input.name, category });
 
             if (result.records.length === 0) 
-                throw new Error(`Failed to find path to metadata '${input.name}'`);
+                throw new Error(`Failed to find path to metadata '${input.name}' in category '${category}'`);
 
             const path = result.records[0].get('pathNames');
 
@@ -753,12 +773,12 @@ export class DB {
      */
     async getMetadataSiblingsForest(input: GetMetadataSiblingsForestInput): Promise<MetadataSiblingsForest> {
         // Get siblings of the input metadata
-        const siblingsData = await this.getMetadataSiblings({ name: input.name });
+        const siblingsData = await this.getMetadataSiblings({ name: input.name, ...( (input as any).category ? { category: (input as any).category } : {}) });
 
         // Build the forest by getting each sibling's tree
         const forest: MetadataTreeNode[] = [];
         for (const siblingName of siblingsData.siblings) {
-            const tree = await this.getMetadataTree({ name: siblingName, maxDepth: input.maxDepth });
+            const tree = await this.getMetadataTree({ name: siblingName, maxDepth: input.maxDepth, category: siblingsData.category } as any);
             forest.push(tree.root);
         }
 
@@ -780,45 +800,46 @@ export class DB {
            const session = this.driver.session();
 
             try {
-                // Check if both nodes exists and get their categories
-                const checkQuery = await session.run(`
-                    MATCH (p: Metadata {name: $parentName})
-                    MATCH (c:Metadata {name: $childName})
-                    RETURN p.category as parentCategory, c.category as childCategory
-                `, { parentName: pair.parentName, childName: pair.childName });
+                // Resolve parent and child categories and ensure uniqueness
+                const parentCatsRes = await session.run(`MATCH (p:Metadata {name: $parentName}) RETURN collect(DISTINCT p.category) AS cats`, { parentName: pair.parentName });
+                const parentCats = parentCatsRes.records[0].get('cats');
+                if (!parentCats || parentCats.length === 0) throw new Error(`Parent metadata '${pair.parentName}' not found`);
+                if (parentCats.length > 1) throw new Error(`Multiple parent metadata with name '${pair.parentName}' found. Please provide category.`);
+                const parentCategory = parentCats[0];
 
-                if (checkQuery.records.length === 0) {
-                    throw new Error(`One or both metadata nodes not found`);
-                }
-
-                const parentCategory = checkQuery.records[0].get('parentCategory');
-                const childCategory = checkQuery.records[0].get('childCategory');
+                const childCatsRes = await session.run(`MATCH (c:Metadata {name: $childName}) RETURN collect(DISTINCT c.category) AS cats`, { childName: pair.childName });
+                const childCats = childCatsRes.records[0].get('cats');
+                if (!childCats || childCats.length === 0) throw new Error(`Child metadata '${pair.childName}' not found`);
+                if (childCats.length > 1) throw new Error(`Multiple child metadata with name '${pair.childName}' found. Please provide category.`);
+                const childCategory = childCats[0];
 
                 if (parentCategory !== childCategory) {
                     throw new Error (`Category mismatch: parent is ${parentCategory}, child is ${childCategory}`);
                 }
 
+                const category = parentCategory;
+
                 // Check if child already has parent
                 const hasParentQuery = await session.run(`
-                    MATCH (c:Metadata {name: $childName})
-                    MATCH (existing:Metadata)-[:PARENT_OF]->(c) 
+                    MATCH (c:Metadata {name: $childName, category: $category})
+                    MATCH (existing:Metadata {category: $category})-[:PARENT_OF]->(c) 
                     RETURN existing.name as existingParent
-                `, { childName: pair.childName });
+                `, { childName: pair.childName, category });
 
                 if (hasParentQuery.records.length > 0) {
                     const existingParent = hasParentQuery.records[0].get('existingParent');
                     throw new Error(`Child already has parent: ${existingParent}`);
                 }
 
-                // Create the parent-child relationship
+                // Create the parent-child relationship (match by name+category)
                 await session.run(`
-                    MATCH (p:Metadata {name: $parentName})
-                    MATCH (c:Metadata {name: $childName})
+                    MATCH (p:Metadata {name: $parentName, category: $category})
+                    MATCH (c:Metadata {name: $childName, category: $category})
                     MERGE (p)-[:PARENT_OF]->(c)
-                `, { parentName: pair.parentName, childName: pair.childName });
+                `, { parentName: pair.parentName, childName: pair.childName, category });
 
                 // Get the parent tree
-                const parentTree = await this.getMetadataTree({ name: pair.parentName, maxDepth: -1 });
+                const parentTree = await this.getMetadataTree({ name: pair.parentName, maxDepth: -1, category } as any);
 
                 results.push({
                     parentName: pair.parentName,
@@ -857,36 +878,42 @@ export class DB {
     async pruneMetadataBranch(input: PruneMetadataBranchInput) : Promise<PruneMetadataNewTrees> {
         const session = this.driver.session();
         try {
-            // Check if both node exists
-            const checkQuery = await session.run(`
-                MATCH (p:Metadata {name: $parentName})
-                MATCH (c:Metadata {name: $childName})
-                RETURN p, c
-            `, { parentName: input.parentName, childName: input.childName });
+            // Resolve categories and uniqueness for parent and child
+            const parentCatsRes = await session.run(`MATCH (p:Metadata {name: $parentName}) RETURN collect(DISTINCT p.category) AS cats`, { parentName: input.parentName });
+            const parentCats = parentCatsRes.records[0].get('cats');
+            if (!parentCats || parentCats.length === 0) throw new Error(`Parent metadata '${input.parentName}' not found`);
+            if (parentCats.length > 1) throw new Error(`Multiple parent metadata with name '${input.parentName}' found. Please provide category.`);
+            const parentCategory = parentCats[0];
 
-            if (checkQuery.records.length === 0) 
-                throw new Error(`One or both metadata not found`);
+            const childCatsRes = await session.run(`MATCH (c:Metadata {name: $childName}) RETURN collect(DISTINCT c.category) AS cats`, { childName: input.childName });
+            const childCats = childCatsRes.records[0].get('cats');
+            if (!childCats || childCats.length === 0) throw new Error(`Child metadata '${input.childName}' not found`);
+            if (childCats.length > 1) throw new Error(`Multiple child metadata with name '${input.childName}' found. Please provide category.`);
+            const childCategory = childCats[0];
+
+            if (parentCategory !== childCategory) throw new Error(`Parent and child belong to different categories`);
+            const category = parentCategory;
 
             // Check if the relationship exists
             const relationQuery = await session.run(`
-                MATCH (p:Metadata {name: $parentName})-[r:PARENT_OF]->(c:Metadata {name: $childName})
+                MATCH (p:Metadata {name: $parentName, category: $category})-[r:PARENT_OF]->(c:Metadata {name: $childName, category: $category})
                 RETURN r
-            `, { parentName: input.parentName, childName: input.childName });
+            `, { parentName: input.parentName, childName: input.childName, category });
 
             if (relationQuery.records.length === 0) 
-                throw new Error(`No parent-child relationship exists between '${input.parentName}' and '${input.childName}'`);
+                throw new Error(`No parent-child relationship exists between '${input.parentName}' and '${input.childName}' in category '${category}'`);
 
             // Remove the parent-child relationship
             await session.run(`
-                MATCH (p:Metadata {name: $parentName})-[r:PARENT_OF]->(c:Metadata {name: $childName})
+                MATCH (p:Metadata {name: $parentName, category: $category})-[r:PARENT_OF]->(c:Metadata {name: $childName, category: $category})
                 DELETE r
-            `, { parentName: input.parentName, childName: input.childName });
+            `, { parentName: input.parentName, childName: input.childName, category });
         } finally {
             await session.close();
         }
 
-        const parentTree = await this.getMetadataTree({ name: input.parentName, maxDepth: -1 });
-        const childTree = await this.getMetadataTree({ name: input.childName, maxDepth: -1  });
+        const parentTree = await this.getMetadataTree({ name: input.parentName, maxDepth: -1 } as any);
+        const childTree = await this.getMetadataTree({ name: input.childName, maxDepth: -1  } as any);
 
         return {
             parentTree: parentTree,
@@ -901,6 +928,47 @@ export class DB {
            **"I want to rename 'sorting' to 'sort_algorithm'"**
          */
     // TODO: permessi metadati dello stesso nome ma con categorie diverse
+
+    async renameMetadata(input: RenameMetadataSchema) : Promise<Metadata> {
+        const session = this.driver.session();
+        try {
+            // Verify old metadata exists
+            const oldCheck = await session.run(`
+                MATCH (m:Metadata {name: $oldName, category: $category})
+                RETURN m
+            `, { oldName: input.oldName, category: input.category });
+
+            if (oldCheck.records.length === 0) 
+                throw new Error(`Metadata '${input.oldName}' in category '${input.category}' not found`);
+
+            // Verify new name doesn't exist in the same category
+            const newCheck = await session.run(`
+                MATCH (m:Metadata {name: $newName, category: $category})
+                RETURN m
+            `, { newName: input.newName, category: input.category });
+
+            if (newCheck.records.length > 0)
+                throw new Error(`Metadata '${input.newName}' already exists in category '${input.category}'`);
+
+            const result = await session.run(`
+                MATCH (m:Metadata {name: $oldName, category: $category})
+                SET m.name = $newName
+                RETURN m
+            `, {
+                oldName: input.oldName,
+                newName: input.newName,
+                category: input.category
+            });
+
+            const record = result.records[0].get('m');
+            return {
+                name: record.properties.name,
+                category: record.properties.category
+            };
+        } finally {
+            await session.close();
+        }
+    }
 
     /**
      * Get a list of snippets by a list of metadata. Each snippet has all the input metadata 
@@ -923,13 +991,13 @@ export class DB {
                 throw new Error(`Some metadata don't exists or don't match the category`);
             }
 
-            // Find the snippets that have ALL the specified metadata
+            // Find the snippets that have ALL the specified metadata (matching by name+category)
             const result = await session.run(`
                 MATCH (s:Snippet)-[:HAS_METADATA]->(m:Metadata)
-                WHERE m.name IN $metadataNames
+                WHERE m.name IN $metadataNames AND m.category = $category
                 WITH s, collect(DISTINCT m.name) as matchedMetadata
                 WHERE size(matchedMetadata) = $requiredCount
-                MATCH (s)-[:HAS_METADATA]->(allMeta:Metadata)
+                MATCH (s)-[:HAS_METADATA]->(allMeta:Metadata {category: $category})
                 WITH s, collect(DISTINCT allMeta.category) as categories,
                     collect(DISTINCT allMeta.name) as allMetadataNames
                 ORDER BY size(allMetadataNames) ASC
@@ -942,7 +1010,7 @@ export class DB {
                     category: head(categories),
                     metadataNames: allMetadataNames
                 } AS snippet
-            `, { metadataNames: input.metadataNames, requiredCount: input.metadataNames.length });
+            `, { metadataNames: input.metadataNames, requiredCount: input.metadataNames.length, category: input.category });
 
             return result.records.map(record => {
                 const snippet = record.get('snippet');
@@ -974,13 +1042,13 @@ export class DB {
             }
 
             // Find snippets that have at least one of the specified metadata
-            // and count how many matches each snippet has
+            // and count how many matches each snippet has (matching by name+category)
             const result = await session.run(`
                 MATCH (s:Snippet)-[:HAS_METADATA]->(m:Metadata)
-                WHERE m.name IN $metadataNames
+                WHERE m.name IN $metadataNames AND m.category = $category
                 WITH s, collect(DISTINCT m.name) as matchedMetadata
                 WITH s, matchedMetadata, size(matchedMetadata) as matchCount
-                MATCH (s)-[:HAS_METADATA]->(allMeta:Metadata)
+                MATCH (s)-[:HAS_METADATA]->(allMeta:Metadata {category: $category})
                 WITH s, matchCount, collect(DISTINCT allMeta.category) as categories,
                     collect(DISTINCT allMeta.name) as allMetadataNames
                 RETURN {
@@ -995,7 +1063,8 @@ export class DB {
                 matchCount
                 ORDER BY matchCount DESC
             `, {
-                metadataNames: input.metadataNames
+                metadataNames: input.metadataNames,
+                category: input.category
             });
 
             return result.records.map(record => {
@@ -1043,15 +1112,15 @@ export class DB {
                 { name: input.name }
             );
 
-            // Create new metadata relationships
+            // Create new metadata relationships (match metadata by name+category)
             const result = await session.run(`
                 MATCH (s:Snippet {name: $name})
                 WITH s
                 UNWIND $metadataNames as metadataName
-                MATCH (m:Metadata {name: metadataName})
+                MATCH (m:Metadata {name: metadataName, category: $category})
                 MERGE (s)-[:HAS_METADATA]->(m)
                 WITH s
-                MATCH (s)-[:HAS_METADATA]->(m:Metadata)
+                MATCH (s)-[:HAS_METADATA]->(m:Metadata {category: $category})
                 WITH s, collect(DISTINCT m.category) AS categories, collect(DISTINCT m.name) AS metadataNames
                 RETURN {
                     name: s.name,
@@ -1064,7 +1133,8 @@ export class DB {
                 } AS s
             `, {
                 name: input.name,
-                metadataNames: input.metadataNames
+                metadataNames: input.metadataNames,
+                category: input.category
             });
 
             const snippet = result.records[0].get('s');
@@ -1078,10 +1148,14 @@ export class DB {
      * Clears database and storage
      */
     async clear(): Promise<void> {
-        const session: Session = this.driver.session();
-        try{
-            await session.run("MATCH (n) DETACH DELETE n");
+        await this.clear_constraints();
+        await this.clear_items();
+        console.log("Database cleared: nodes, relationships, constraints and indexes removed."); 
+    }
 
+    async clear_constraints(): Promise<void> {
+        const session: Session = this.driver.session();
+        try {
             const constraints = await session.run("SHOW CONSTRAINTS");
             for (const record of constraints.records) {
                 const name = record.get("name");
@@ -1093,9 +1167,16 @@ export class DB {
                 const name = record.get("name");
                 await session.run(`DROP INDEX ${name} IF EXISTS`);
             }
+        } finally {
+            await session.close();
+        }
+    }
 
-            console.log("Database cleared: nodes, relationships, constraints and indexes removed."); 
-        } finally{
+    async clear_items(): Promise<void> {
+        const session: Session = this.driver.session();
+        try {
+            await session.run("MATCH (n) DETACH DELETE n");
+        } finally {
             await session.close();
         }
     }
@@ -1113,18 +1194,29 @@ export class DB {
      * @param label 
      * @param constraint_name 
      * @param field 
-     * @param type it can be a uniqueness constraint as well as a existence constraint
+     * @param category 
      */
     async create_field_constraint(
         session: Session, 
         label: string, 
         constraint_name: string, 
-        field: string
+        field: string,
+        category?: string
     ): Promise<void> {
-        await session.run(`
-            CREATE CONSTRAINT ${constraint_name} IF NOT EXISTS
-            FOR (${label[0].toLowerCase()}:${label}) REQUIRE ${label[0].toLowerCase()}.${field} IS UNIQUE
-        `);
+        if (label === "Metadata" && category) {
+            // Uniqueness constraint for name+category
+            await session.run(`
+                CREATE CONSTRAINT ${constraint_name} IF NOT EXISTS
+                FOR (${label[0].toLowerCase()}:${label})
+                REQUIRE (${label[0].toLowerCase()}.name, ${label[0].toLowerCase()}.category) IS UNIQUE
+            `);
+        } else {
+            // constraint for snippet
+            await session.run(`
+                CREATE CONSTRAINT ${constraint_name} IF NOT EXISTS
+                FOR (${label[0].toLowerCase()}:${label}) REQUIRE ${label[0].toLowerCase()}.${field} IS UNIQUE
+            `);
+        }
     }
 
     /**

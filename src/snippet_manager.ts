@@ -15,6 +15,7 @@ import {
     GetMetadataTreeSchema,
     GetSnippetsByMetadataSchema,
     PruneMetadataBranchSchema,
+    RenameMetadataSchema,
     SearchSnippetByNameSchema,
     UpdateSnippetContentSchema,
     UpdateSnippetMetadataSchema
@@ -45,6 +46,7 @@ type ToolInput = z.infer<typeof ToolInputSchema>;
 enum ToolName {
     // TEST_DB = "test_db",
     // CLEAR = "clear",
+    CLEAR_CONSTRAINTS = "clear_constraints",
     // GET_ALL_SNIPPETS = "get_all_snippets",
     // GET_ALL_METADATA = "get_all_metadata",
     CREATE_METADATA = "create_metadata",
@@ -66,7 +68,8 @@ enum ToolName {
     PRUNE_METADATA_BRANCH = "prune_metadata_branch",
     GET_SNIPPETS_BY_METADATA_SUBSET = "get_snippets_by_metadata_subset",
     GET_SNIPPETS_BY_METADATA_INTERSECTION = "get_snippets_by_metadata_intersection",
-    UPDATE_SNIPPET_METADATA = "update_snippet_metadata"
+    UPDATE_SNIPPET_METADATA = "update_snippet_metadata",
+    RENAME_METADATA = "rename_metadata"
 }
 
 async function handleTool<T>(
@@ -117,8 +120,6 @@ export const createServer = (db: DB) => {
     server.setRequestHandler(ListResourcesRequestSchema, async () => {
         return {
             resources: [
-                { uri: "metadata://all", name: "All Metadata", description: "List of all metadata" },
-                { uri: "snippets://all", name: "All Snippets", description: "List of all snippets" },
                 { uri: "general://instructions", name: "Instructions", description: "Detailed operational guide for this MCP server", mimeType: "text/markdown" }
             ]
         };
@@ -126,16 +127,6 @@ export const createServer = (db: DB) => {
 
     server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
         const uri = request.params.uri;
-
-        if (uri === "metadata://all") {
-            const res = await db.getAllMetadata();
-            return { contents: [ { uri, mimeType: "application/json", text: JSON.stringify(res, null, 2) } ] };
-        }
-
-        if (uri === "snippets://all") {
-            const res = await db.getAllSnippets();
-            return { contents: [ { uri, mimeType: "application/json", text: JSON.stringify(res, null, 2) } ] };
-        }
 
         if (uri === "general://instructions") 
             return { contents: [ { uri, mimeType: "text/markdown", text: instructions } ] };
@@ -147,6 +138,7 @@ export const createServer = (db: DB) => {
         const tools: Tool[] = [
             // { name: ToolName.TEST_DB, description: "Tests db connection", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
             // { name: ToolName.CLEAR, description: "Clear all data", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
+            { name: ToolName.CLEAR_CONSTRAINTS, description: "Clear db constraints", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
             { name: ToolName.CREATE_METADATA, description: "Create a metadata. Insert the name, the category (concept or language) and the parent", inputSchema: zodToJsonSchema(CreateMetadataSchema) as ToolInput },
             { name: ToolName.CREATE_SNIPPET, description: "Create a snippet with metadata. All metadata have the same category. The name has to be lowercase, no spaces, ending with the extension (for example .py)", inputSchema: zodToJsonSchema(CreateSnippetSchema) as ToolInput },
             // { name: ToolName.GET_ALL_SNIPPETS, description: "Get all snippets in list form. All snippets have a list of metadata and a category", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
@@ -169,6 +161,7 @@ export const createServer = (db: DB) => {
             { name: ToolName.GET_SNIPPETS_BY_METADATA_SUBSET, description: "Get a list of snippets that are related to all the given metadata", inputSchema: zodToJsonSchema(GetSnippetsByMetadataSchema) as ToolInput },
             { name: ToolName.GET_SNIPPETS_BY_METADATA_INTERSECTION, description: "Get a list of snippets. Each snippet contains at least one metadata of the given list. The list in output is ordered by cardinality of intersection", inputSchema: zodToJsonSchema(GetSnippetsByMetadataSchema) as ToolInput },
             { name: ToolName.UPDATE_SNIPPET_METADATA, description: "Replace metadata of a snippet", inputSchema: zodToJsonSchema(UpdateSnippetMetadataSchema) as ToolInput },
+            { name: ToolName.RENAME_METADATA, description: "Rename a metadata", inputSchema: zodToJsonSchema(RenameMetadataSchema) as ToolInput },
         ];
 
         return { tools };
@@ -195,6 +188,15 @@ export const createServer = (db: DB) => {
                 return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to clear DB' }) }] };
             }
         }*/
+
+        if (name === ToolName.CLEAR_CONSTRAINTS) {
+            try {
+                await db.clear_constraints();
+                return { content: [{ type: "text", text: JSON.stringify({ success: true, content: 'cleared DB constraints' }) }] };
+            } catch (error: any) { 
+                return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to clear DB' }) }] };
+            }
+        }
 
         if (name === ToolName.CREATE_METADATA) {
             return await handleTool(CreateMetadataSchema, args, db.createMetadata.bind(db), "Failed to create metadata");
@@ -284,6 +286,9 @@ export const createServer = (db: DB) => {
 
         if (name === ToolName.UPDATE_SNIPPET_METADATA)
             return await handleTool(UpdateSnippetMetadataSchema, args, db.updateSnippetMetadata.bind(db), "Failed to update metadata o snippet");
+
+        if (name === ToolName.RENAME_METADATA)
+            return await handleTool(RenameMetadataSchema, args, db.renameMetadata.bind(db), "Failed to rename metadata");
 
         throw new Error(`Unknown tool: ${name}`);
     });

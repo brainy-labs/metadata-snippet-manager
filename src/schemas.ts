@@ -52,7 +52,10 @@ export const CreateMetadataSchema = z.object({
 export type CreateMetadataInput = z.infer<typeof CreateMetadataSchema>;
 
 export const DeleteMetadataSchema = z.object({
-    names: z.array(z.string().min(1).max(100).toLowerCase())
+    metadata : z.array(z.object({
+        name: z.string().min(1).max(100).toLowerCase(),
+        category: z.nativeEnum(MetadataCategory)
+    }))
 });
 export type DeleteMetadataInput = z.infer<typeof DeleteMetadataSchema>;
 
@@ -213,3 +216,10 @@ export const GetSnippetsByDateSchema = z.object({
     )
 }).optional();
 export type GetSnippetsByDateInput = z.infer<typeof GetSnippetsByDateSchema>;
+
+export const RenameMetadataSchema = z.object({
+    oldName: z.string().min(1).max(100).toLowerCase(),
+    newName: z.string().min(1).max(100).toLowerCase(),
+    category: z.nativeEnum(MetadataCategory)
+});
+export type RenameMetadataSchema = z.infer<typeof RenameMetadataSchema>;

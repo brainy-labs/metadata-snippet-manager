@@ -37,7 +37,10 @@ export const CreateMetadataSchema = z.object({
     parentName: z.string().toLowerCase().optional()
 });
 export const DeleteMetadataSchema = z.object({
-    names: z.array(z.string().min(1).max(100).toLowerCase())
+    metadata: z.array(z.object({
+        name: z.string().min(1).max(100).toLowerCase(),
+        category: z.nativeEnum(MetadataCategory)
+    }))
 });
 export const DeleteSnippetsSchema = z.object({
     names: z.array(z.string().min(1).max(255).toLowerCase())
@@ -142,3 +145,8 @@ export const GetSnippetsByDateSchema = z.object({
     operator: z.enum(['lte', 'gte', 'eq']).default('lte').describe("Comparison operator: lte (<=), gte (>=), eq (=)"),
     limit: z.number().int().positive().default(10).describe("Maximum number of snippets to return")
 }).optional();
+export const RenameMetadataSchema = z.object({
+    oldName: z.string().min(1).max(100).toLowerCase(),
+    newName: z.string().min(1).max(100).toLowerCase(),
+    category: z.nativeEnum(MetadataCategory)
+});
