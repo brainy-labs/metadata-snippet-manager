@@ -150,3 +150,34 @@ export const RenameMetadataSchema = z.object({
     newName: z.string().min(1).max(100).toLowerCase(),
     category: z.nativeEnum(MetadataCategory)
 });
+export const TranslationSchema = z.object({
+    extension: z.string().min(1).max(10).toLowerCase().describe("File extension for the translated snippet"),
+    content: z.string(),
+    translatedAt: z.date(),
+    snippetName: z.string().min(1).max(255).toLowerCase().describe("Name of the original snippet")
+});
+export const CreateSnippetTranslationSchema = z.object({
+    snippetName: z.string().min(1).max(255).toLowerCase(),
+    extension: z.string().min(1).max(10).toLowerCase(),
+    content: z.string()
+});
+export const UpdateSnippetTranslationSchema = z.object({
+    snippetName: z.string().min(1).max(255).toLowerCase(),
+    extension: z.string().min(1).max(10).toLowerCase(),
+    content: z.string()
+});
+export const DeleteSnippetTranslationSchema = z.object({
+    snippetName: z.string().min(1).max(255).toLowerCase(),
+    extension: z.string().min(1).max(10).toLowerCase()
+});
+export const GetSnippetTranslationSchema = z.object({
+    snippetName: z.string().min(1).max(255).toLowerCase(),
+    extension: z.string().min(1).max(10).toLowerCase()
+});
+export const SnippetWithTranslationsSchema = z.object({
+    snippet: SnippetSchema,
+    translations: z.array(TranslationSchema)
+});
+export const GetSnippetTranslationsSchema = z.object({
+    snippetName: z.string().min(1).max(255).toLowerCase()
+});

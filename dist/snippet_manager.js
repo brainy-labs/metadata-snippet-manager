@@ -1,4 +1,4 @@
-import { AddMetadataParentSchema, CreateMetadataForestSchema, CreateMetadataSchema, CreateMetadataSubtreeSchema, CreateMetadataTreeSchema, CreateSnippetSchema, DeleteMetadataSchema, DeleteSnippetsSchema, GetMetadataForestSchema, GetMetadataPathSchema, GetMetadataSiblingsForestSchema, GetMetadataSiblingsSchema, GetMetadataTreeSchema, GetSnippetsByMetadataSchema, PruneMetadataBranchSchema, RenameMetadataSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema, UpdateSnippetMetadataSchema } from "./schemas.js";
+import { AddMetadataParentSchema, CreateMetadataForestSchema, CreateMetadataSchema, CreateMetadataSubtreeSchema, CreateMetadataTreeSchema, CreateSnippetSchema, CreateSnippetTranslationSchema, UpdateSnippetTranslationSchema, DeleteSnippetTranslationSchema, GetSnippetTranslationSchema, GetSnippetTranslationsSchema, DeleteMetadataSchema, DeleteSnippetsSchema, GetMetadataForestSchema, GetMetadataPathSchema, GetMetadataSiblingsForestSchema, GetMetadataSiblingsSchema, GetMetadataTreeSchema, GetSnippetsByMetadataSchema, PruneMetadataBranchSchema, RenameMetadataSchema, SearchSnippetByNameSchema, UpdateSnippetContentSchema, UpdateSnippetMetadataSchema } from "./schemas.js";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -20,6 +20,11 @@ var ToolName;
     // GET_ALL_METADATA = "get_all_metadata",
     ToolName["CREATE_METADATA"] = "create_metadata";
     ToolName["CREATE_SNIPPET"] = "create_snippet";
+    ToolName["CREATE_SNIPPET_TRANSLATION"] = "create_snippet_translation";
+    ToolName["UPDATE_SNIPPET_TRANSLATION"] = "update_snippet_translation";
+    ToolName["DELETE_SNIPPET_TRANSLATION"] = "delete_snippet_translation";
+    ToolName["GET_SNIPPET_WITH_TRANSLATIONS"] = "get_snippet_with_translations";
+    ToolName["GET_SNIPPET_TRANSLATIONS"] = "get_snippet_translations";
     ToolName["DELETE_METADATA"] = "delete_metadata";
     ToolName["DELETE_SNIPPETS"] = "delete_snippets";
     ToolName["UPDATE_SNIPPET_CONTENT"] = "update_snippet_content";
@@ -96,6 +101,12 @@ export const createServer = (db) => {
             { name: ToolName.CLEAR_CONSTRAINTS, description: "Clear db constraints", inputSchema: zodToJsonSchema(z.object({})) },
             { name: ToolName.CREATE_METADATA, description: "Create a metadata. Insert the name, the category (concept or language) and the parent", inputSchema: zodToJsonSchema(CreateMetadataSchema) },
             { name: ToolName.CREATE_SNIPPET, description: "Create a snippet with metadata. All metadata have the same category. The name has to be lowercase, no spaces, ending with the extension (for example .py)", inputSchema: zodToJsonSchema(CreateSnippetSchema) },
+            // translation tools
+            { name: ToolName.CREATE_SNIPPET_TRANSLATION, description: "Create a translation for a snippet (extension + content). Fails if translation for that extension already exists.", inputSchema: zodToJsonSchema(CreateSnippetTranslationSchema) },
+            { name: ToolName.UPDATE_SNIPPET_TRANSLATION, description: "Update an existing translation for a snippet (extension + content).", inputSchema: zodToJsonSchema(UpdateSnippetTranslationSchema) },
+            { name: ToolName.DELETE_SNIPPET_TRANSLATION, description: "Delete a translation for a snippet by extension.", inputSchema: zodToJsonSchema(DeleteSnippetTranslationSchema) },
+            { name: ToolName.GET_SNIPPET_WITH_TRANSLATIONS, description: "Get a snippet with its translations (optionally filtered by extension).", inputSchema: zodToJsonSchema(GetSnippetTranslationSchema) },
+            { name: ToolName.GET_SNIPPET_TRANSLATIONS, description: "Get all translations for a snippet (input: { snippetName }).", inputSchema: zodToJsonSchema(GetSnippetTranslationsSchema) },
             // { name: ToolName.GET_ALL_SNIPPETS, description: "Get all snippets in list form. All snippets have a list of metadata and a category", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
             // { name: ToolName.GET_ALL_METADATA, description: "Get all metadata in list fortm. All metadata have a category and a parent of the same category.", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
             { name: ToolName.DELETE_METADATA, description: "Delete some metadata.", inputSchema: zodToJsonSchema(DeleteMetadataSchema) },
@@ -149,12 +160,20 @@ export const createServer = (db) => {
                 return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to clear DB' }) }] };
             }
         }
-        if (name === ToolName.CREATE_METADATA) {
+        if (name === ToolName.CREATE_METADATA)
             return await handleTool(CreateMetadataSchema, args, db.createMetadata.bind(db), "Failed to create metadata");
-        }
-        if (name === ToolName.CREATE_SNIPPET) {
+        if (name === ToolName.CREATE_SNIPPET)
             return await handleTool(CreateSnippetSchema, args, db.createSnippet.bind(db), "Failed to create snippet");
-        }
+        if (name === ToolName.CREATE_SNIPPET_TRANSLATION)
+            return await handleTool(CreateSnippetTranslationSchema, args, db.createSnippetTranslation.bind(db), "Failed to create snippet translation");
+        if (name === ToolName.UPDATE_SNIPPET_TRANSLATION)
+            return await handleTool(UpdateSnippetTranslationSchema, args, db.updateSnippetTranslation.bind(db), "Failed to update snippet translation");
+        if (name === ToolName.DELETE_SNIPPET_TRANSLATION)
+            return await handleTool(DeleteSnippetTranslationSchema, args, db.deleteSnippetTranslation.bind(db), "Failed to delete snippet translation");
+        if (name === ToolName.GET_SNIPPET_WITH_TRANSLATIONS)
+            return await handleTool(GetSnippetTranslationSchema, args, db.getSnippetWithTranslations.bind(db), "Failed to get snippet with translations");
+        if (name === ToolName.GET_SNIPPET_TRANSLATIONS)
+            return await handleTool(GetSnippetTranslationsSchema, args, db.getSnippetTranslations.bind(db), "Failed to get snippet translations");
         /*
         if (name === ToolName.GET_ALL_SNIPPETS) {
             try {

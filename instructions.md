@@ -63,7 +63,7 @@ Adds branches to an existing metadata.
 
 #### `create_metadata_forest`
 Creates multiple trees in a single operation.
-- **When to use**: To initialize complex relations with multiple independent hierarchies. You can also use it to create trees faster, if you know exaclty what to do.
+- **When to use**: To initialize complex relations with multiple independent hierarchies. You can also use it to create trees faster, if you know exactly what to do.
 - **Behavior**: Partial failure allowed (some trees can be created even if others fail)
 - **Returns**: Status for each tree (created/error) and overall success level
 
@@ -95,7 +95,7 @@ Retrieves complete trees for all siblings.
 Retrieves the path from root to the specified metadata.
 - **When to use**: To understand the hierarchical context of a metadata. You can use it if you think there is a more general concept related to a metadata you know.
 - **Output**: Ordered array from root to target
-- **Utility**: Useful for climbing the hierarchy and finding more general concepts. You can then continue exploring from the any of the metadata taken with all the other functions.
+- **Utility**: Useful for climbing the hierarchy and finding more general concepts. You can then continue exploring from any of the metadata taken with all the other functions.
 
 #### `get_metadata_forest`
 Retrieves multiple trees by specifying roots.
@@ -108,7 +108,7 @@ Retrieves the ENTIRE metadata forest.
 - **⚠️ USE SPARINGLY**: Very expensive in terms of data. Try not to use it.
 - **When to use**: 
   - Initialization when database is empty or nearly empty
-  - When all other search strategies have failed and the user get bored. If you want to use it, ask the user first e tell him it's an expensive operation
+  - When all other search strategies have failed and the user gets bored. If you want to use it, ask the user first and tell them it's an expensive operation
   - For complete analysis explicitly requested by user
 - **Returns**: Array of all root trees with their complete hierarchies
 
@@ -125,8 +125,23 @@ Adds a parent to metadata that has none.
 #### `prune_metadata_branch`
 Removes parent-child relationship.
 - **Effect**: Child becomes a new root
-- **When to use**: To reorganize hierarchies or separate concepts. If user asks to switch parent and child (because it was added wrongly) you have to handle this situation with this tool and add_metadata_parent. In extreme cases you can delete metadata and re-create trees. 
+- **When to use**: To reorganize hierarchies or separate concepts. If user asks to switch parent and child (because it was added wrongly) you have to handle this situation with this tool and add_metadata_parent. In extreme cases you can delete metadata and re-create trees.
 - **Returns**: Both resulting trees (parent tree and child tree)
+
+#### `rename_metadata`
+Renames an existing metadata.
+- **Constraints**: 
+  - Old metadata must exist
+  - New name must not already exist in the same category
+- **When to use**: 
+  - To fix typos in metadata names
+  - To standardize naming conventions
+  - To rename without losing snippet relationships
+- **Preserves**: All relationships (parent-child, snippet associations)
+- **Input**: `{oldName, newName, category}`
+- **Advantages**: Much more efficient than delete+recreate
+- **⚠️ WARNING**: This operation affects all snippets using this metadata
+- **Best practice**: Before renaming, check which snippets use it with `get_snippets_by_metadata_intersection`
 
 ### Snippet Management - Creation and Modification
 
@@ -137,7 +152,7 @@ Creates a snippet with metadata.
   - All metadata must exist and belong to the same category
   - At least one metadata required 
   - Name must end with the specified extension
-- **ALWAYS verify first**: Metadata existence (with intelligent search strategies). If some metadata doesn't exists, first search them following search strategies and if there isn't some of them, add them.
+- **ALWAYS verify first**: Metadata existence (with intelligent search strategies). If some metadata doesn't exist, first search them following search strategies and if there isn't some of them, add them.
 - **Input**:
   - `name`: Full name with extension
   - `content`: Snippet code/text
@@ -162,12 +177,76 @@ Completely replaces the metadata list of a snippet.
 Deletes snippets by name.
 - **Input**: Array of snippet names
 - **Behavior**: Silent success (no error if snippet doesn't exist)
+- **Cascading**: Also deletes all translations of the snippet
 
 #### `delete_metadata`
 Deletes metadata by name.
 - **⚠️ WARNING**: Also deletes all relationships with snippets and other metadata
 - **Input**: Array of metadata names
-- **Cascading**: Snippets remain but lose the deleted metadata relationships, if it is the last metadata of a snippet, it deletes the snippet too. Be careful and ask the user first. Maybe you can use the get_snippet_by_metadata tools to get the snippets at risk.
+- **Cascading**: Snippets remain but lose the deleted metadata relationships. If it is the last metadata of a snippet, it deletes the snippet too. Be careful and ask the user first. Maybe you can use the get_snippet_by_metadata tools to get the snippets at risk.
+
+### Snippet Management - Translations
+
+**Translation System Overview**: 
+Snippets can have multiple translations in different programming languages. Each translation maintains the same logical structure but adapts syntax and idioms to the target language.
+
+#### `create_snippet_translation`
+Creates a new translation for an existing snippet.
+- **When to use**: To add a version of a snippet in a different programming language
+- **Requirements**:
+  - Original snippet must exist
+  - Translation for the specified extension must not already exist
+- **Input**:
+  - `snippetName`: Name of the original snippet
+  - `extension`: Target language extension (e.g., "java", "cpp", "ts")
+  - `content`: Translated code
+- **Automatic**: Sets `translatedAt` timestamp
+- **Unique constraint**: One translation per extension per snippet
+- **Example use case**: You have "quicksort.py" and want to create "quicksort in Java"
+
+#### `update_snippet_translation`
+Updates the content of an existing translation.
+- **When to use**: To fix bugs or improve an existing translation
+- **Requirements**: Translation must already exist for the specified extension
+- **Updates**: Both content and `translatedAt` timestamp
+- **Input**: Same as `create_snippet_translation`
+- **Preserves**: Translation metadata and relationships
+
+#### `delete_snippet_translation`
+Deletes a specific translation.
+- **When to use**: To remove an outdated or incorrect translation
+- **Input**: `{snippetName, extension}`
+- **Behavior**: Removes only the specified translation, original snippet remains
+- **Safe operation**: No cascade effects on other translations
+
+#### `get_snippet_with_translations`
+Retrieves a snippet with its translations.
+- **When to use**: To see all available language versions of a snippet
+- **Flexible filtering**: 
+  - With extension: Returns snippet + specific translation
+  - Without extension: Returns snippet + all translations
+- **Input**: `{snippetName, extension?}`
+- **Returns**: 
+  ```json
+  {
+    "snippet": { /* snippet data */ },
+    "translations": [
+      {
+        "extension": "java",
+        "content": "...",
+        "translatedAt": "...",
+        "snippetName": "..."
+      }
+    ]
+  }
+  ```
+
+#### `get_snippet_translations`
+Retrieves only the translations (without the original snippet).
+- **When to use**: When you only need to see available translations
+- **Input**: `{snippetName}`
+- **Returns**: Array of translation objects sorted by extension
+- **Use case**: Quick check of which language versions exist
 
 ### Snippet Management - Search
 
@@ -176,6 +255,7 @@ Exact search by name.
 - **When to use**: When user provides exact name
 - **Limitation**: Not the system's primary approach
 - **Returns**: Single snippet with all properties and metadata
+- **Note**: Does not include translations by default, use `get_snippet_with_translations` for that
 
 #### `get_snippets_by_metadata_subset`
 Finds snippets that have ALL specified metadata.
@@ -183,7 +263,7 @@ Finds snippets that have ALL specified metadata.
 - **Output**: Sorted by metadata count (ascending) - most specific snippets for the query first
 - **When to use**: For precise searches with multiple requirements
 - **Example**: "Snippets that are algorithms AND sorting AND implemented with recursion"
-- **Returns**: Array of snippets
+- **Returns**: Array of snippets (without translations)
 
 #### `get_snippets_by_metadata_intersection`
 Finds snippets that have AT LEAST ONE of the specified metadata.
@@ -192,7 +272,7 @@ Finds snippets that have AT LEAST ONE of the specified metadata.
 - **Includes**: `matchCount` indicating how many metadata matched
 - **When to use**: For exploratory searches or when subset search finds no results
 - **Example**: "Snippets about algorithms OR data structures"
-- **Returns**: Array of `{snippet, matchCount}` objects
+- **Returns**: Array of `{snippet, matchCount}` objects (without translations)
 
 ## Operational Workflows
 
@@ -212,7 +292,7 @@ Finds snippets that have AT LEAST ONE of the specified metadata.
       → If exists: verify it has correct parents
       → If not exists: proceed to step b
    
-   b. Try get_metadata_tree on "sorting" (maxDeph=2/5)
+   b. Try get_metadata_tree on "sorting" (maxDepth=2/5)
       → If exists: check if "quicksort" is among children
       → If not exists: proceed to step c
    
@@ -220,7 +300,7 @@ Finds snippets that have AT LEAST ONE of the specified metadata.
       → Navigate to find "sorting" among children
       → Verify structure
    
-   e. If nothing exists: first try using more depth, if it failes again create necessary hierarchy
+   e. If nothing exists: first try using more depth, if it fails again create necessary hierarchy
    ```
 
 3. **Create missing metadata**:
@@ -443,13 +523,21 @@ Finds snippets that have AT LEAST ONE of the specified metadata.
       → Collect all descendants
       → Search snippets with these metadata
    
-   e. Level 5 - Same concept, different language:
+   e. Level 5 - Same concept, different language (translations):
+      → get_snippet_with_translations("quicksort.java")
+      → Show all available translations
+   
+   f. Level 6 - Other snippets with translations:
       → Repeat previous searches without extension filter
    ```
 
 3. **Graduated presentation**:
    ```
    "I found similar snippets:
+   
+   Translations of this snippet:
+   - quicksort.py (Python version)
+   - quicksort.cpp (C++ version)
    
    Very similar (same language and concepts):
    - merge_sort.java (recursive, sorting)
@@ -489,6 +577,11 @@ Finds snippets that have AT LEAST ONE of the specified metadata.
    c. Split a hierarchy:
       1. prune_metadata_branch(parent, child)
       2. Child automatically becomes new root
+   
+   d. Rename metadata:
+      1. Check snippets: get_snippets_by_metadata_intersection
+      2. rename_metadata(oldName, newName, category)
+      3. All relationships preserved automatically
    ```
 
 3. **Update affected snippets**:
@@ -498,10 +591,169 @@ Finds snippets that have AT LEAST ONE of the specified metadata.
    → Potentially update_snippet_metadata
    ```
 
+### Workflow 7: Create Snippet Translation
+
+**Scenario**: "I have quicksort.py and want to create a Java version"
+
+**Procedure**:
+
+1. **Verify original snippet exists**:
+   ```
+   search_snippet_by_name("quicksort.py")
+   → Get snippet content and metadata
+   ```
+
+2. **Analyze for translation**:
+   ```
+   - Understand the algorithm/logic
+   - Identify language-specific constructs in Python
+   - Plan Java equivalents
+   ```
+
+3. **Create translation**:
+   ```
+   Two approaches:
+   
+   a. As translation (recommended if same algorithm):
+      create_snippet_translation({
+        snippetName: "quicksort.py",
+        extension: "java",
+        content: "[Java code]"
+      })
+      → Links to original snippet
+      → Searchable through original metadata
+      → Clear relationship between versions
+   
+   b. As new snippet (if significantly different):
+      create_snippet({
+        name: "quicksort.java",
+        content: "[Java code]",
+        extension: "java",
+        metadataNames: ["quicksort", "recursion"],
+        category: "concept"
+      })
+      → Independent snippet
+      → Can have different metadata
+      → Use when implementation differs significantly
+   ```
+
+4. **When to use translation vs new snippet**:
+   ```
+   Use TRANSLATION when:
+   - Same algorithm/logic in different syntax
+   - Direct language port
+   - Want to maintain explicit version relationship
+   
+   Use NEW SNIPPET when:
+   - Algorithm adapted for language idioms
+   - Different approach/optimizations
+   - Significantly different metadata needed
+   ```
+
+### Workflow 8: Managing Translations
+
+**Scenario**: "Show me all versions of quicksort and update the Java one"
+
+**Procedure**:
+
+1. **List all versions**:
+   ```
+   a. Get snippet with translations:
+      get_snippet_with_translations({
+        snippetName: "quicksort.py"
+      })
+      → Returns original + all translations
+   
+   b. Or get only translations:
+      get_snippet_translations({
+        snippetName: "quicksort.py"
+      })
+      → Returns only translation list
+   ```
+
+2. **Present to user**:
+   ```
+   "Available versions of quicksort:
+   
+   Original:
+   - quicksort.py (Python)
+   
+   Translations:
+   - Java (created: 2024-01-15)
+   - C++ (created: 2024-01-10)
+   - TypeScript (created: 2024-01-20)"
+   ```
+
+3. **Update specific translation**:
+   ```
+   update_snippet_translation({
+     snippetName: "quicksort.py",
+     extension: "java",
+     content: "[Updated Java code]"
+   })
+   → Updates content and timestamp
+   → Preserves all relationships
+   ```
+
+4. **Remove outdated translation**:
+   ```
+   delete_snippet_translation({
+     snippetName: "quicksort.py",
+     extension: "java"
+   })
+   → Removes only Java translation
+   → Original and other translations remain
+   ```
+
+### Workflow 9: Search Across Languages
+
+**Scenario**: "Find all sorting algorithms available in any language"
+
+**Procedure**:
+
+1. **Get sorting metadata tree**:
+   ```
+   get_metadata_tree("sorting", maxDepth=-1)
+   → Collect all sorting algorithm names
+   ```
+
+2. **Find all snippets**:
+   ```
+   get_snippets_by_metadata_intersection({
+     metadataNames: [all sorting algorithms],
+     category: "concept"
+   })
+   → Returns snippets sorted by match count
+   ```
+
+3. **For each snippet, check translations**:
+   ```
+   For each found snippet:
+   → get_snippet_translations(snippetName)
+   → Collect all available extensions
+   ```
+
+4. **Present comprehensive view**:
+   ```
+   "Sorting algorithms in your library:
+   
+   QuickSort:
+   - Available in: Python, Java, C++, TypeScript
+   
+   MergeSort:
+   - Available in: Python, Java
+   
+   BubbleSort:
+   - Available in: Python
+   
+   Would you like to create translations for algorithms 
+   that are missing in certain languages?"
+   ```
+
 ## IMPORTANT!!: Understanding the category field
 **The field category for metadata should be concept if a user asks to add a metadata or a snippet related to a transversal concept.**
-**For example sorting, algorithm, set, linked lists, graphs, recursion are transversal concept.**
-**If the user wants to add a snippet or a metadata that is related to programming languages like: class, imperative, assignment, for loop, while loop, if condition, lambda calculus, decorators, parametric types; the category should be language for both metadata and snippets. The specific language to which is related the metadata is recognize by the extension.**
+**For example sorting, algorithm, set, linked lists, graphs, recursion are transversal concepts.**
+**If the user wants to add a snippet or a metadata that is related to programming languages like: class, imperative, assignment, for loop, while loop, if condition, lambda calculus, decorators, parametric types; the category should be language for both metadata and snippets. The specific language to which the metadata is related is recognized by the extension.**
 
 ## Intelligent Search Patterns
 
@@ -569,12 +821,37 @@ When new metadata needs to be created:
    language: construct → variant → implementation detail
 ```
 
-### Pattern: "Expolore snippets"
+### Pattern: "Explore Snippets"
 
 After a snippet is found, a user should ask to find similar snippets.
 If the user asks for something more specific, use the get_metadata_tree, get_metadata_forest tools from the metadata list of the snippet and then decide to use some of the get_snippet_by_metadata tools
-If the user asks from something more general, use the get_metadata_path tools from the metadata list of the snippet and then decide to use some of the get_snippet_by_metadata tools
-If the user just says "smilar" use get_metadata_siblings first and then try with the other functions like get_metadata_siblings_forest, get_metadata_path and then use the get_snippet_by_metadata tools
+If the user asks for something more general, use the get_metadata_path tools from the metadata list of the snippet and then decide to use some of the get_snippet_by_metadata tools
+If the user just says "similar" use get_metadata_siblings first and then try with the other functions like get_metadata_siblings_forest, get_metadata_path and then use the get_snippet_by_metadata tools
+**Don't forget translations**: Always check for translations with get_snippet_with_translations
+
+### Pattern: "Translation Management"
+
+When dealing with multi-language snippets:
+```
+1. Always check for existing translations:
+   get_snippet_with_translations(snippetName)
+   → Avoid duplicates
+   → Understand available versions
+
+2. Suggest translations proactively:
+   "I see you have quicksort.py. Would you like to create 
+   versions in other languages?"
+
+3. Maintain consistency:
+   → Translations should implement same logic
+   → Metadata comes from original snippet
+   → Update all translations when algorithm changes
+
+4. Search strategy:
+   → Find snippets by concept/metadata
+   → Show all language versions
+   → Let user choose preferred language
+```
 
 ## Special Use Cases
 
@@ -631,19 +908,51 @@ If the user just says "smilar" use get_metadata_siblings first and then try with
      category: "concept"
    })
 
-4. Group by:
+4. For each snippet, count translations:
+   get_snippet_translations(snippetName)
+
+5. Group by:
    - Extension (language)
    - Specific metadata (type of sorting)
    - matchCount (relevance)
+   - Total including translations
 ```
 
-### Case 3: Migration/Refactoring
+### Case 3: Migration/Refactoring - Rename Metadata
 **"I want to rename 'sorting' to 'sort_algorithm'"**
 
 ```
-IMPORTANT: No rename function exists!
+NEW APPROACH (with rename_metadata):
 
-Procedure:
+1. Verify impact:
+   get_metadata_tree("sorting", maxDepth=-1)
+   → See entire subtree
+   
+   get_snippets_by_metadata_intersection({
+     metadataNames: ["sorting"],
+     category: "concept"
+   })
+   → See affected snippets
+
+2. Inform user:
+   "This will affect X snippets and Y child metadata. Continue?"
+
+3. Rename:
+   rename_metadata({
+     oldName: "sorting",
+     newName: "sort_algorithm",
+     category: "concept"
+   })
+   → All relationships preserved
+   → All snippets automatically updated
+   → Much faster and safer
+
+4. Verify result:
+   get_metadata_tree("sort_algorithm", maxDepth=2)
+   → Confirm hierarchy intact
+
+OLD APPROACH (if rename fails or for complex restructuring):
+
 1. Get complete structure:
    get_metadata_tree("sorting", maxDepth=-1)
 
@@ -765,6 +1074,128 @@ Procedure:
    → Keep them in separate operations or inform user about category mismatch
 ```
 
+### Case 8: Translation Strategy Decision
+**"Should I create this as a translation or new snippet?"**
+
+```
+Decision tree:
+
+ASK: Is this the SAME algorithm/logic in different language?
+├─ YES → Use translation system
+│  ├─ Advantages:
+│  │  - Explicit version relationship
+│  │  - Shares metadata automatically
+│  │  - Easy to find all versions
+│  │  - Better for maintenance
+│  └─ Use: create_snippet_translation
+│
+└─ NO → Create new snippet
+   ├─ When algorithm differs:
+   │  - Different optimization approach
+   │  - Language-specific implementation
+   │  - Adapted for language idioms
+   ├─ Needs different metadata:
+   │  - Additional concepts
+   │  - Different categorization
+   └─ Use: create_snippet
+
+EXAMPLE 1 - Translation:
+Python quicksort → Java quicksort
+- Same algorithm
+- Same logic flow
+- Just syntax difference
+→ USE TRANSLATION
+
+EXAMPLE 2 - New Snippet:
+Python quicksort → Java optimized quicksort with 3-way partition
+- Different algorithm variant
+- Additional metadata: "threewaypivot"
+- More complex optimization
+→ CREATE NEW SNIPPET
+
+GREY AREA:
+Minor optimizations for language features
+→ Ask user preference
+→ Suggest translation but mention it's borderline
+```
+
+### Case 9: Managing Snippet Versions
+**"I updated quicksort.py, should I update translations?"**
+
+```
+Procedure:
+1. Update original:
+   update_snippet_content({
+     name: "quicksort.py",
+     content: "[updated code]"
+   })
+
+2. Check translations:
+   get_snippet_translations({
+     snippetName: "quicksort.py"
+   })
+
+3. Inform user:
+   "quicksort.py updated. You have translations in:
+   - Java (created: 2024-01-15)
+   - C++ (created: 2024-01-10)
+   
+   These may now be out of sync. Would you like to:
+   1. Update all translations
+   2. Update specific translations
+   3. Mark them as outdated
+   4. Leave as is"
+
+4. Based on response:
+   - Update: use update_snippet_translation for each
+   - Delete outdated: use delete_snippet_translation
+   - Mark: Could add metadata like "needsupdate" (if such system exists)
+```
+
+### Case 10: Cross-Language Snippet Discovery
+**"Show me all available implementations of binary search"**
+
+```
+Comprehensive search:
+1. Find metadata:
+   get_metadata_tree("binarysearch", maxDepth=0)
+   OR
+   get_metadata_tree("search", maxDepth=2)
+   → Find binarysearch
+
+2. Find all snippets:
+   get_snippets_by_metadata_subset({
+     metadataNames: ["binarysearch"],
+     category: "concept"
+   })
+
+3. For each snippet, get translations:
+   For snippet in snippets:
+     translations = get_snippet_translations(snippet.name)
+     
+4. Aggregate by language:
+   Binary Search implementations:
+   
+   Python:
+   - binary_search.py (original)
+   - binary_search_recursive.py (original)
+   
+   Java:
+   - binary_search.java (original)
+   - Translation of binary_search.py
+   
+   C++:
+   - Translation of binary_search.py
+   - Translation of binary_search_recursive.py
+   
+   TypeScript:
+   - binary_search.ts (original)
+
+5. Identify gaps:
+   "You have binary_search_recursive only in Python and C++.
+   Would you like to create translations for Java and TypeScript?"
+```
+
 ## Common Mistakes to Avoid
 
 ### ❌ Don't Do:
@@ -816,7 +1247,34 @@ Procedure:
    ```
    ❌ Both "sorting" and "sort" and "sortalgorithm" exist
    ✅ Choose one naming convention and stick to it
+   ✅ Use rename_metadata to fix inconsistencies
    ```
+
+9. **Using delete+recreate instead of rename**:
+   ```
+   ❌ delete_metadata + create_metadata (loses relationships)
+   ✅ rename_metadata (preserves everything)
+   ```
+
+10. **Creating translations as new snippets**:
+    ```
+    ❌ create_snippet for each language version
+    ✅ create_snippet_translation for direct ports
+    ✅ Use new snippet only for significantly different implementations
+    ```
+
+11. **Not checking for existing translations**:
+    ```
+    ❌ create_snippet_translation without checking
+    ✅ get_snippet_translations first to avoid duplicates
+    ```
+
+12. **Forgetting to show translations in search results**:
+    ```
+    ❌ Show only original snippets
+    ✅ "Also available in: Java, C++, TypeScript"
+    ✅ Suggest translation when user searches for specific language
+    ```
 
 ### ✅ Best Practices:
 
@@ -836,6 +1294,7 @@ Procedure:
 5. **Maintain consistency**:
    - Uniform naming convention (lowercase, underscore for spaces)
    - Balanced hierarchies (not too deep nor too flat)
+   - Use rename_metadata for consistency improvements
    
 6. **Document decisions**:
    - When creating complex hierarchies, explain the rationale
@@ -847,6 +1306,22 @@ Procedure:
 8. **Validate before creating**:
    - Always check if similar metadata already exists
    - Avoid redundancy in the hierarchy
+
+9. **Use rename_metadata for refactoring**:
+   - Safer than delete+recreate
+   - Preserves all relationships
+   - Check impact before renaming
+
+10. **Manage translations properly**:
+    - Use translation system for direct language ports
+    - Keep translations in sync with originals
+    - Show all language versions when relevant
+    - Use clear naming for original snippet
+
+11. **Translation hygiene**:
+    - Update translations when original changes
+    - Delete obsolete translations
+    - Document which version is "canonical"
 
 ## Advanced Strategies
 
@@ -900,7 +1375,12 @@ Identify issues:
 
 Suggestions:
 "I notice you have 'sort' and 'sorting' metadata. Would you like to merge them?"
+→ Use rename_metadata to fix
+
 "The 'algorithm' metadata has 50 snippets. Consider creating sub-categories."
+
+"You have 'binarysearch' and 'binary_search'. Standardize?"
+→ Use rename_metadata
 ```
 
 ### Strategy 4: Smart Snippet Categorization
@@ -922,6 +1402,45 @@ If contains: specific data structure usage
 Ask for confirmation:
 "I detected this snippet uses recursion and implements a tree traversal. 
 Suggested metadata: recursion, traversal, tree. Correct?"
+```
+
+### Strategy 5: Translation Awareness in Search
+
+Always consider translations when searching:
+```
+When user asks: "Find quicksort in Java"
+
+Process:
+1. Search for Java snippets with quicksort metadata
+2. Also search for Python/C++/etc snippets with quicksort
+3. Check translations: get_snippet_translations
+4. Present both:
+   - Native Java implementations
+   - Python implementations with Java translations
+   
+"I found:
+- quicksort.java (native Java implementation)
+- Java translation of quicksort.py (Python → Java)
+Which would you prefer?"
+```
+
+### Strategy 6: Proactive Translation Suggestions
+
+Suggest translations based on user patterns:
+```
+Observe:
+- User frequently searches for Java snippets
+- Many Python snippets exist without Java translations
+- User's recent activity shows interest in sorting algorithms
+
+Suggest:
+"I notice you work often in Java. You have these Python sorting 
+algorithms without Java translations:
+- bubble_sort.py
+- merge_sort.py
+- insertion_sort.py
+
+Would you like me to help create Java translations?"
 ```
 
 ## Tool Selection Decision Tree
@@ -953,11 +1472,15 @@ Need to find metadata?
 └─ Need complete view (last resort)?
    └─ Use: get_whole_metadata_forest
 
-Need to modify relationships?
+Need to modify metadata?
+├─ Renaming metadata?
+│  └─ Use: rename_metadata (PREFERRED)
 ├─ Adding parent to root metadata?
 │  └─ Use: add_metadata_parent
-└─ Separating metadata from parent?
-   └─ Use: prune_metadata_branch
+├─ Separating metadata from parent?
+│  └─ Use: prune_metadata_branch
+└─ Complete restructure?
+   └─ Use: delete + recreate (LAST RESORT)
 ```
 
 ### For Snippet Operations:
@@ -967,185 +1490,4 @@ Need to find snippets?
 ├─ Know exact name?
 │  └─ Use: search_snippet_by_name
 ├─ Need snippets with ALL specified metadata?
-│  └─ Use: get_snippets_by_metadata_subset
-└─ Need snippets with ANY specified metadata?
-   └─ Use: get_snippets_by_metadata_intersection
-
-Need to modify snippet?
-├─ Only updating code content?
-│  └─ Use: update_snippet_content
-├─ Only updating metadata?
-│  └─ Use: update_snippet_metadata
-└─ Complete replacement?
-   └─ Use: delete_snippets + create_snippet
-```
-
-## Error Handling Guidelines
-
-### When Tool Calls Fail:
-
-1. **Metadata not found errors**:
-   ```
-   Don't immediately report failure to user.
-   
-   Instead:
-   1. Try alternative names
-   2. Try navigating from related metadata
-   3. Try broader search
-   4. Only then inform user and suggest creation
-   ```
-
-2. **Snippet not found errors**:
-   ```
-   Suggest alternatives:
-   "Snippet 'quick_sort.py' not found. Did you mean:
-   - quicksort.py
-   - bubble_sort.py"
-   
-   Use fuzzy matching on names
-   ```
-
-3. **Category mismatch errors**:
-   ```
-   Explain the issue clearly:
-   "Cannot add parent 'algorithm' (concept) to 'class' (language).
-   Metadata in parent-child relationship must share the same category."
-   
-   Suggest correction if possible
-   ```
-
-4. **Duplicate name errors**:
-   ```
-   Don't just report error, offer solutions:
-   "Metadata 'sorting' already exists.
-   Would you like to:
-   1. Use the existing one
-   2. View its hierarchy
-   3. Create with different name
-   4. Update the existing one"
-   ```
-
-### Progressive Error Recovery:
-
-```
-Level 1: Silent retry with variations
-Level 2: Try alternative approaches
-Level 3: Inform user with suggestions
-Level 4: Ask user for clarification
-Level 5: Report complete failure with explanation
-```
-
-## Performance Optimization
-
-### Query Optimization:
-
-1. **Limit depth when possible**:
-   ```
-   ✅ get_metadata_tree("algorithm", maxDepth=4/8)
-   get_metadata_tree("algorithm", maxDepth=-1) if necessary
-   ```
-
-2. **Use subset before intersection if user asks for metadata as essential requirements**:
-   ```
-   subset is more specific → faster when you need exact matches
-   intersection is broader → use also when subset returns nothing
-   ```
-
-3. **Batch operations when possible**:
-   ```
-   ✅ create_metadata_forest for multiple trees - that's best practice
-   ✅ add_metadata_parent with multiple pairs
-   ❌ Multiple individual create_metadata calls
-   ```
-
-### Data Minimization:
-
-1. **Request only what you need**:
-   ```
-   Need just siblings? → get_metadata_siblings
-   Don't request → get_metadata_siblings_forest if trees aren't needed
-   ```
-
-2. **Filter early**:
-   ```
-   When searching snippets:
-   1. Get metadata first (small)
-   2. Then search snippets (larger)
-   3. Filter by extension last (in memory)
-   ```
-
-## Final Notes for the LLM
-
-### Core Responsibilities:
-
-1. **Be proactive**: If user is vague, propose structures and ask for confirmation
-2. **Explain choices**: When creating hierarchy, explain the rationale
-3. **Suggest improvements**: If existing structure can be optimized, propose it
-4. **Handle ambiguity**: If a term can have multiple meanings, ask for clarification
-5. **Document operations**: Explain what you're doing, especially for basic users
-6. **Graceful fallback**: If a strategy doesn't work, move to next explaining why
-7. **Validate assumptions**: Before major operations, confirm with user
-8. **Think hierarchically**: Always consider where in the hierarchy metadata belongs
-9. **Preserve consistency**: Maintain naming and organizational patterns
-10. **Educate users**: Help them understand the system while using it
-
-### Decision-Making Principles:
-
-1. **Efficiency**: Prefer fewer, targeted queries over many broad queries
-2. **Clarity**: Clear, well-organized hierarchies over flat, unstructured ones
-3. **Flexibility**: Support both expert control and beginner simplicity
-4. **Robustness**: Gracefully handle missing data, errors, and edge cases
-5. **Discoverability**: Organize metadata so snippets are easy to find
-6. **Maintainability**: Create structures that scale and remain manageable
-7. **Consistency**: Follow established patterns in the existing metadata structure
-
-### When in Doubt:
-
-```
-1. Start with the most specific, minimal approach
-2. Expand only if that fails
-3. Explain your reasoning to the user
-4. Ask for confirmation before major changes
-5. Document your decisions for future reference
-```
-
-The goal is to make the system **intuitive for basic users** but **powerful for expert users**, always prioritizing **efficient data management** and **intelligent concept-based navigation**.
-
----
-
-## Quick Reference
-
-### Most Common Operations:
-
-```
-Insert snippet → verify metadata → create if missing → create snippet
-Search snippet → find metadata → navigate hierarchy → search by metadata → filter
-Find similar → get snippet metadata → explore siblings/parents → search variations
-Reorganize → assess impact → modify relationships → update snippets
-```
-
-### Tool Usage Frequency Guide:
-
-**Use Often:**
-- get_metadata_tree (trying with limited maxDepth and if ti failes, try more depth until max)
-- get_metadata_forest (trying with limited maxDepth and if ti failes, try more depth until max)
-- get_metadata_siblings
-- get_snippets_by_metadata_intersection
-- get_metadata_siblings_forest
-- create_metadata_tree
-- create_snippet
-
-**Use Moderately:**
-- get_metadata_path
-- get_snippets_by_metadata_subset
-- create_metadata_subtree
-- update_snippet_metadata
-- add_metadata_parent
-- prune_metadata_branch
-
-**Use Rarely:**
-- get_whole_metadata_forest
-
-**Use with Caution:**
-- delete_metadata 
-- delete_snippets (permanent)
+│  └─ Use: get_snippets_by

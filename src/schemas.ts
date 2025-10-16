@@ -223,3 +223,48 @@ export const RenameMetadataSchema = z.object({
     category: z.nativeEnum(MetadataCategory)
 });
 export type RenameMetadataSchema = z.infer<typeof RenameMetadataSchema>;
+
+export const TranslationSchema = z.object({
+    extension: z.string().min(1).max(10).toLowerCase().describe("File extension for the translated snippet"),
+    content: z.string(),
+    translatedAt: z.date(),
+    snippetName: z.string().min(1).max(255).toLowerCase().describe("Name of the original snippet")
+});
+export type Translation = z.infer<typeof TranslationSchema>;
+
+export const CreateSnippetTranslationSchema = z.object({
+    snippetName: z.string().min(1).max(255).toLowerCase(),
+    extension: z.string().min(1).max(10).toLowerCase(),
+    content: z.string()
+});
+export type CreateSnippetTranslationInput = z.infer<typeof CreateSnippetTranslationSchema>;
+
+export const UpdateSnippetTranslationSchema = z.object({
+    snippetName: z.string().min(1).max(255).toLowerCase(),
+    extension: z.string().min(1).max(10).toLowerCase(),
+    content: z.string()
+});
+export type UpdateSnippetTranslationInput = z.infer<typeof UpdateSnippetTranslationSchema>;
+
+export const DeleteSnippetTranslationSchema = z.object({
+    snippetName: z.string().min(1).max(255).toLowerCase(),
+    extension: z.string().min(1).max(10).toLowerCase()
+});
+export type DeleteSnippetTranslationInput = z.infer<typeof DeleteSnippetTranslationSchema>;
+
+export const GetSnippetTranslationSchema = z.object({
+    snippetName: z.string().min(1).max(255).toLowerCase(),
+    extension: z.string().min(1).max(10).toLowerCase()
+});
+export type GetSnippetTranslationInput = z.infer<typeof GetSnippetTranslationSchema>;
+
+export const SnippetWithTranslationsSchema = z.object({
+    snippet: SnippetSchema,
+    translations: z.array(TranslationSchema)
+});
+export type SnippetWithTranslations = z.infer<typeof SnippetWithTranslationsSchema>;
+
+export const GetSnippetTranslationsSchema = z.object({
+    snippetName: z.string().min(1).max(255).toLowerCase()
+});
+export type GetSnippetTranslationsInput = z.infer<typeof GetSnippetTranslationsSchema>;

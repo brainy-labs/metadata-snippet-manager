@@ -25,6 +25,11 @@ export class DB {
             await this.create_field_constraint(session, "Snippet", "snippet_name_unique", "name");
             await this.create_field_constraint(session, "Metadata", "metadata_name_category_unique", "name", "category");
             await this.create_index(session, "Metadata", "metadata_category", "category");
+            await session.run(`
+                CREATE CONSTRAINT translation_snippet_extension_unique IF NOT EXISTS
+                FOR (t:Translation)
+                REQUIRE (t.snippetName, t.extension) IS UNIQUE
+            `);
         }
         finally {
             await session.close();
@@ -130,6 +135,9 @@ export class DB {
      * @param input name of snippet to delete
      */
     async deleteSnippetsByName(input) {
+        for (const name of input.names) {
+            await this.deleteAllSnippetTranslations(name);
+        }
         const session = this.driver.session();
         try {
             const res = await session.run(`UNWIND $names as name MATCH (s:Snippet {name: name}) DETACH DELETE s`, { names: input.names });
@@ -982,6 +990,188 @@ export class DB {
             });
             const snippet = result.records[0].get('s');
             return snippet;
+        }
+        finally {
+            await session.close();
+        }
+    }
+    async createSnippetTranslation(input) {
+        const session = this.driver.session();
+        try {
+            // Verify snippet exists
+            const snippetCheck = await session.run(`
+                MATCH (s:Snippet {name: $snippetName})
+                RETURN s
+            `, { snippetName: input.snippetName });
+            if (snippetCheck.records.length === 0) {
+                throw new Error(`Snippet '${input.snippetName}' doesn't exist`);
+            }
+            // Check if translation already exists for this extension
+            const translationCheck = await session.run(`
+                MATCH (s:Snippet {name: $snippetName})-[t:HAS_TRANSLATION]->()
+                WHERE t.extension = $extension
+                RETURN t
+            `, {
+                snippetName: input.snippetName,
+                extension: input.extension
+            });
+            if (translationCheck.records.length > 0) {
+                throw new Error(`Translation for extension '${input.extension}' already exists for snippet '${input.snippetName}'`);
+            }
+            // Create translation as a relationship property
+            const result = await session.run(`
+                MATCH (s:Snippet {name: $snippetName})
+                CREATE (t:Translation {
+                    extension: $extension,
+                    content: $content,
+                    translatedAt: datetime(),
+                    snippetName: $snippetName
+                })
+                CREATE (s)-[:HAS_TRANSLATION]->(t)
+                RETURN t
+            `, {
+                snippetName: input.snippetName,
+                extension: input.extension,
+                content: input.content
+            });
+            const translation = result.records[0].get('t').properties;
+            return {
+                extension: translation.extension,
+                content: translation.content,
+                translatedAt: translation.translatedAt,
+                snippetName: translation.snippetName
+            };
+        }
+        finally {
+            await session.close();
+        }
+    }
+    async updateSnippetTranslation(input) {
+        const session = this.driver.session();
+        try {
+            // Check if snippet and translation exist
+            const result = await session.run(`
+                MATCH (s:Snippet {name: $snippetName})-[:HAS_TRANSLATION]->(t:Translation {extension: $extension})
+                SET t.content = $content, t.translatedAt = datetime()
+                RETURN t
+            `, {
+                snippetName: input.snippetName,
+                extension: input.extension,
+                content: input.content
+            });
+            if (result.records.length === 0) {
+                throw new Error(`Translation for extension'${input.extension}' not found for snippet '${input.snippetName}'`);
+            }
+            const translation = result.records[0].get('t').properties;
+            return {
+                extension: translation.extension,
+                content: translation.content,
+                translatedAt: translation.translatedAt,
+                snippetName: translation.snippetName
+            };
+        }
+        finally {
+            await session.close();
+        }
+    }
+    async deleteSnippetTranslation(input) {
+        const session = this.driver.session();
+        try {
+            const result = await session.run(`
+                MATCH (s:Snippet {name: $snippetName})-[:HAS_TRANSLATION]->(t:Translation {extension: $extension})
+                DETACH DELETE t
+                RETURN count(t) as deleted
+            `, {
+                snippetName: input.snippetName,
+                extension: input.extension
+            });
+            const deleted = result.records[0].get('deleted').toNumber();
+            if (deleted === 0) {
+                throw new Error(`Translation for extension'${input.extension}' not found for snippet '${input.snippetName}'`);
+            }
+        }
+        finally {
+            await session.close();
+        }
+    }
+    async getSnippetWithTranslations(input) {
+        const session = this.driver.session();
+        try {
+            // Get snippet with metadata
+            const snippetResult = await session.run(`
+                MATCH (s:Snippet {name: $snippetName})-[:HAS_METADATA]->(m:Metadata)
+                WITH s, collect(DISTINCT m.category) AS categories, collect(DISTINCT m.name) AS metadataNames
+                RETURN {
+                    name: s.name,
+                    content: s.content,
+                    extension: s.extension,
+                    size: s.size,
+                    createdAt: s.createdAt,
+                    category: head(categories),
+                    metadataNames: metadataNames
+                } AS snippet
+            `, { snippetName: input.snippetName });
+            if (snippetResult.records.length === 0) {
+                throw new Error(`Snippet '${input.snippetName}' doesn't exist`);
+            }
+            const snippet = snippetResult.records[0].get('snippet');
+            // Get translations (all or filtered by extension)
+            const translationQuery = input.extension
+                ? `MATCH (s:Snippet {name: $snippetName})-[:HAS_TRANSLATION]->(t:Translation {extension: $extension})
+                RETURN t`
+                : `MATCH (s:Snippet {name: $snippetName})-[:HAS_TRANSLATION]->(t:Translation)
+                RETURN t`;
+            const translationResult = await session.run(translationQuery, {
+                snippetName: input.snippetName,
+                extension: input.extension || null
+            });
+            const translations = translationResult.records.map(record => {
+                const t = record.get('t').properties;
+                return {
+                    extension: t.extension,
+                    content: t.content,
+                    translatedAt: t.translatedAt,
+                    snippetName: t.snippetName
+                };
+            });
+            return {
+                snippet: snippet,
+                translations: translations
+            };
+        }
+        finally {
+            await session.close();
+        }
+    }
+    async getSnippetTranslations(input) {
+        const session = this.driver.session();
+        try {
+            const result = await session.run(`
+                MATCH (s:Snippet {name: $snippetName})-[:HAS_TRANSLATION]->(t:Translation)
+                RETURN t
+                ORDER BY t.extension
+            `, { snippetName: input.snippetName });
+            return result.records.map(record => {
+                const t = record.get('t').properties;
+                return {
+                    extension: t.extension,
+                    content: t.content,
+                    translatedAt: t.translatedAt,
+                    snippetName: t.snippetName
+                };
+            });
+        }
+        finally {
+            await session.close();
+        }
+    }
+    async deleteAllSnippetTranslations(snippetName) {
+        const session = this.driver.session();
+        try {
+            await session.run(`
+                MATCH (s:Snippet {name: $snippetName})-[:HAS_TRANSLATION]->(t:Translation)
+                DETACH DELETE t
+            `, { snippetName });
         }
         finally {
             await session.close();
