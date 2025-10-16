@@ -895,6 +895,12 @@ export class DB {
     }
 
     // TODO: traduzione di snippet
+    // TODO: update_metadata_name
+        /**
+         * ### Case 3: Migration/Refactoring
+           **"I want to rename 'sorting' to 'sort_algorithm'"**
+         */
+    // TODO: permessi metadati dello stesso nome ma con categorie diverse
 
     /**
      * Get a list of snippets by a list of metadata. Each snippet has all the input metadata 

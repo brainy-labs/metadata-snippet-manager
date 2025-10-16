@@ -20,28 +20,20 @@ Search occurs **by concepts, not by names**. Use metadata and their hierarchical
 - Siblings: metadata at the same hierarchical level
 - Parents: more general metadata
 - Children: more specific metadata
+The creation of metadata has to be done in the same way, trying to be more specific on the leaves and more general on the roots. Siblings have to be at the same generality level.
 
 ### 3. User Adaptability
-The system must support two user types:
-- **Expert user**: Explicitly specifies metadata, categories, and relationships
-- **Basic user**: Delegates metadata management to the LLM, providing only vague descriptions
+The system must support all user types, including:
+- **Expert users**: Explicitly specifies metadata, categories, and relationships
+- **Basic users**: Delegates metadata management to the LLM, providing only vague descriptions
 
 ## Available Tools
 
 ### Metadata Management - Creation
 
-#### `create_metadata`
-Creates a single metadata with name, category, and optional parent.
-- **When to use**: To add an isolated metadata to an existing hierarchy
-- **Verify first**: That the parent exists (if specified) and belongs to the same category
-- **Input**:
-  - `name`: Lowercase string (1-100 chars)
-  - `category`: "concept" or "language"
-  - `parentName`: Optional parent name
-
 #### `create_metadata_tree`
 Creates an entire metadata tree from scratch.
-- **When to use**: To establish complete new hierarchies
+- **When to use**: To establish complete new hierarchies. You can use it also to create one single isolated metadata. If it should have a parent use create_metadata_subtree instead.
 - **Advantages**: Defines all relationships in a single operation
 - **Atomic operation**: Either all nodes are created or none
 - **Input example**:
@@ -65,58 +57,58 @@ Creates an entire metadata tree from scratch.
 
 #### `create_metadata_subtree`
 Adds branches to an existing metadata.
-- **When to use**: To expand an existing hierarchy with new sub-nodes
+- **When to use**: To expand an existing hierarchy with new sub-nodes. You can use it also to create one single metadata and specify its parent by the root. If it shouldn't have a parent use create_metadata_tree instead.
 - **Verify first**: That the root exists
 - **Returns**: Root name, category, and count of children added
 
 #### `create_metadata_forest`
 Creates multiple trees in a single operation.
-- **When to use**: To initialize complex categories with multiple independent hierarchies
+- **When to use**: To initialize complex relations with multiple independent hierarchies. You can also use it to create trees faster, if you know exaclty what to do.
 - **Behavior**: Partial failure allowed (some trees can be created even if others fail)
 - **Returns**: Status for each tree (created/error) and overall success level
 
 ### Metadata Management - Search and Navigation
 
 #### `get_metadata_tree`
-Retrieves a complete tree starting from a root.
+Retrieves a complete tree starting from a root. The root could be not a real root. It is a node you consider a root for now, because it doesn't get its ancestors.
 - **Parameters**: 
   - `name`: Root name
   - `maxDepth`: Maximum depth (-1 for entire tree)
-- **When to use**: When you know the starting metadata and want to explore descendants
-- **Strategy**: Prefer limited `maxDepth` (1-3) for initial explorations
+- **When to use**: When you know the starting metadata and want to explore descendants, so you want to find a more specific concept
+- **Strategy**: Prefer limited `maxDepth` (1-7) for initial explorations
 - **Returns**: Tree structure with category
 
 #### `get_metadata_siblings`
 Retrieves all sibling metadata (same parent).
-- **When to use**: To find alternative or related concepts at the same level
+- **When to use**: To find alternative or related concepts at the same level. So, if you think you can find a concept of the same level of generality of a metadata you already know, use it.
 - **Output**: List of metadata names with same category
 - **Special case**: If metadata is a root, returns only itself
 - **Returns**: Category and siblings array
 
 #### `get_metadata_siblings_forest`
 Retrieves complete trees for all siblings.
-- **When to use**: When simple siblings search is insufficient and you need to explore descendants too
+- **When to use**: When simple siblings search is insufficient and you need to explore descendants too, so maybe you can think the concept you want to get is more specific but it's the descendant of a related concept.
 - **Parameters**: `name` and optional `maxDepth` for each sibling tree
 - **Strategy**: Use when exploring related concept hierarchies
 
 #### `get_metadata_path`
 Retrieves the path from root to the specified metadata.
-- **When to use**: To understand the hierarchical context of a metadata
+- **When to use**: To understand the hierarchical context of a metadata. You can use it if you think there is a more general concept related to a metadata you know.
 - **Output**: Ordered array from root to target
-- **Utility**: Useful for climbing the hierarchy and finding more general concepts
+- **Utility**: Useful for climbing the hierarchy and finding more general concepts. You can then continue exploring from the any of the metadata taken with all the other functions.
 
 #### `get_metadata_forest`
 Retrieves multiple trees by specifying roots.
-- **When to use**: When you know specific starting metadata in different categories
+- **When to use**: When you know specific starting metadata in different categories. If you know what to search and you want to search faster.
 - **Strategy**: Prefer this over `get_whole_metadata_forest` when possible
 - **Input**: Array of `{name, maxDepth}` objects
 
 #### `get_whole_metadata_forest`
 Retrieves the ENTIRE metadata forest.
-- **⚠️ USE SPARINGLY**: Very expensive in terms of data
+- **⚠️ USE SPARINGLY**: Very expensive in terms of data. Try not to use it.
 - **When to use**: 
   - Initialization when database is empty or nearly empty
-  - When all other search strategies have failed
+  - When all other search strategies have failed and the user get bored. If you want to use it, ask the user first e tell him it's an expensive operation
   - For complete analysis explicitly requested by user
 - **Returns**: Array of all root trees with their complete hierarchies
 
@@ -126,14 +118,14 @@ Retrieves the ENTIRE metadata forest.
 Adds a parent to metadata that has none.
 - **Constraints**: Child metadata MUST NOT already have a parent
 - **Verification**: Same category for parent and child
-- **When to use**: To reorganize hierarchy by connecting existing roots
+- **When to use**: To reorganize hierarchy by connecting existing roots. If you see there is some metadata that should be related in some way, you can use it to make a parent relationship or also to make a sibling relationship. If you think two metadata should be siblings, they should have the same parent, so make it possible.
 - **Input**: Array of `{parentName, childName}` pairs
 - **Returns**: Status for each pair and overall success
 
 #### `prune_metadata_branch`
 Removes parent-child relationship.
 - **Effect**: Child becomes a new root
-- **When to use**: To reorganize hierarchies or separate concepts
+- **When to use**: To reorganize hierarchies or separate concepts. If user asks to switch parent and child (because it was added wrongly) you have to handle this situation with this tool and add_metadata_parent. In extreme cases you can delete metadata and re-create trees. 
 - **Returns**: Both resulting trees (parent tree and child tree)
 
 ### Snippet Management - Creation and Modification
@@ -143,9 +135,9 @@ Creates a snippet with metadata.
 - **Essential requirements**:
   - Name: lowercase, no spaces, with extension (e.g., "bubble_sort.py")
   - All metadata must exist and belong to the same category
-  - At least one metadata required
+  - At least one metadata required 
   - Name must end with the specified extension
-- **ALWAYS verify first**: Metadata existence (with intelligent search strategies)
+- **ALWAYS verify first**: Metadata existence (with intelligent search strategies). If some metadata doesn't exists, first search them following search strategies and if there isn't some of them, add them.
 - **Input**:
   - `name`: Full name with extension
   - `content`: Snippet code/text
@@ -175,7 +167,7 @@ Deletes snippets by name.
 Deletes metadata by name.
 - **⚠️ WARNING**: Also deletes all relationships with snippets and other metadata
 - **Input**: Array of metadata names
-- **Cascading**: Snippets remain but lose the deleted metadata relationships
+- **Cascading**: Snippets remain but lose the deleted metadata relationships, if it is the last metadata of a snippet, it deletes the snippet too. Be careful and ask the user first. Maybe you can use the get_snippet_by_metadata tools to get the snippets at risk.
 
 ### Snippet Management - Search
 
@@ -216,19 +208,19 @@ Finds snippets that have AT LEAST ONE of the specified metadata.
 
 2. **Verify existing metadata** (progressive strategy):
    ```
-   a. Try get_metadata_tree on "quicksort" (maxDepth=1)
+   a. Try get_metadata_tree on "quicksort" (maxDepth=1/3)
       → If exists: verify it has correct parents
       → If not exists: proceed to step b
    
-   b. Try get_metadata_tree on "sorting" (maxDepth=2)
+   b. Try get_metadata_tree on "sorting" (maxDeph=2/5)
       → If exists: check if "quicksort" is among children
       → If not exists: proceed to step c
    
-   c. Try get_metadata_tree on "algorithm" (maxDepth=3)
+   c. Try get_metadata_tree on "algorithm" (maxDepth=3/8)
       → Navigate to find "sorting" among children
       → Verify structure
    
-   d. If nothing exists: create necessary hierarchy
+   e. If nothing exists: first try using more depth, if it failes again create necessary hierarchy
    ```
 
 3. **Create missing metadata**:
@@ -285,16 +277,16 @@ Finds snippets that have AT LEAST ONE of the specified metadata.
 2. **Metadata search strategy** (very conservative):
    ```
    a. Try with general terms:
-      get_metadata_tree("sorting", maxDepth=2)
+      get_metadata_tree("sorting", maxDepth=2/5)
       
    b. If fails, try broader concepts:
-      get_metadata_tree("algorithm", maxDepth=3)
+      get_metadata_tree("algorithm", maxDepth=3/7)
       
    c. If fails, try related concepts:
       get_metadata_siblings("datastructure") → explore results
       
-   d. Only if everything fails:
-      get_whole_metadata_forest() to understand what exists
+   d. Only if everything fails trying with all possible searches and more depth:
+      get_whole_metadata_forest() to understand what exists. First tell the user the situation and ask to use it to be sure.
    ```
 
 3. **Create sensible hierarchy**:
@@ -322,11 +314,11 @@ Finds snippets that have AT LEAST ONE of the specified metadata.
 1. **Metadata search strategy**:
    ```
    a. Search "sorting":
-      get_metadata_tree("sorting", maxDepth=2)
+      get_metadata_tree("sorting", maxDepth=2/4)
       → Get list of children (bubble, quick, merge, ...)
    
    b. Search "recursion":
-      get_metadata_path("recursion")
+      get_metadata_path("recursion") or/and get_metadata_tree or/and get_metadata_siblings 
       → Understand where it sits in hierarchy
    
    c. If "recursion" doesn't exist:
@@ -377,11 +369,11 @@ Finds snippets that have AT LEAST ONE of the specified metadata.
 2. **Exploratory search**:
    ```
    a. Try with generic metadata:
-      get_metadata_tree("sorting", maxDepth=1)
+      get_metadata_tree("sorting", maxDepth=3/6)
       → If exists, collect all children names
       
    b. If doesn't exist, try related concepts:
-      get_metadata_tree("algorithm", maxDepth=2)
+      get_metadata_tree("algorithm", maxDepth=2/7)
       → Search for "sorting" among descendants
       → If not there, search siblings: get_metadata_siblings
       
@@ -447,7 +439,7 @@ Finds snippets that have AT LEAST ONE of the specified metadata.
    d. Level 4 - Parents and descendants:
       → get_metadata_path("quicksort") 
       → Take parent ("sorting")
-      → get_metadata_tree("sorting", maxDepth=2)
+      → get_metadata_tree("sorting", maxDepth=2/5)
       → Collect all descendants
       → Search snippets with these metadata
    
@@ -505,6 +497,11 @@ Finds snippets that have AT LEAST ONE of the specified metadata.
    → Evaluate if metadata are still appropriate
    → Potentially update_snippet_metadata
    ```
+
+## IMPORTANT!!: Understanding the category field
+**The field category for metadata should be concept if a user asks to add a metadata or a snippet related to a transversal concept.**
+**For example sorting, algorithm, set, linked lists, graphs, recursion are transversal concept.**
+**If the user wants to add a snippet or a metadata that is related to programming languages like: class, imperative, assignment, for loop, while loop, if condition, lambda calculus, decorators, parametric types; the category should be language for both metadata and snippets. The specific language to which is related the metadata is recognize by the extension.**
 
 ## Intelligent Search Patterns
 
@@ -571,6 +568,13 @@ When new metadata needs to be created:
    concept: general → specific → very specific
    language: construct → variant → implementation detail
 ```
+
+### Pattern: "Expolore snippets"
+
+After a snippet is found, a user should ask to find similar snippets.
+If the user asks for something more specific, use the get_metadata_tree, get_metadata_forest tools from the metadata list of the snippet and then decide to use some of the get_snippet_by_metadata tools
+If the user asks from something more general, use the get_metadata_path tools from the metadata list of the snippet and then decide to use some of the get_snippet_by_metadata tools
+If the user just says "smilar" use get_metadata_siblings first and then try with the other functions like get_metadata_siblings_forest, get_metadata_path and then use the get_snippet_by_metadata tools
 
 ## Special Use Cases
 
@@ -976,22 +980,6 @@ Need to modify snippet?
    └─ Use: delete_snippets + create_snippet
 ```
 
-## Resources System
-
-The MCP server provides two resources accessible via the resources protocol:
-
-### `metadata://all`
-- **Purpose**: Get list of ALL metadata in flat form
-- **When to use**: For quick overview or when tools are insufficient
-- **Returns**: JSON array of all metadata with name, category, parentName
-- **Note**: Doesn't provide hierarchical structure
-
-### `snippets://all`
-- **Purpose**: Get list of ALL snippets with their metadata
-- **When to use**: For bulk analysis or statistics
-- **Returns**: JSON array of all snippets with full details
-- **Note**: Can be large, use sparingly
-
 ## Error Handling Guidelines
 
 ### When Tool Calls Fail:
@@ -1053,19 +1041,19 @@ Level 5: Report complete failure with explanation
 
 1. **Limit depth when possible**:
    ```
-   ✅ get_metadata_tree("algorithm", maxDepth=2)
-   ❌ get_metadata_tree("algorithm", maxDepth=-1) // when only shallow info needed
+   ✅ get_metadata_tree("algorithm", maxDepth=4/8)
+   get_metadata_tree("algorithm", maxDepth=-1) if necessary
    ```
 
-2. **Use subset before intersection**:
+2. **Use subset before intersection if user asks for metadata as essential requirements**:
    ```
    subset is more specific → faster when you need exact matches
-   intersection is broader → use only when subset returns nothing
+   intersection is broader → use also when subset returns nothing
    ```
 
 3. **Batch operations when possible**:
    ```
-   ✅ create_metadata_forest for multiple trees
+   ✅ create_metadata_forest for multiple trees - that's best practice
    ✅ add_metadata_parent with multiple pairs
    ❌ Multiple individual create_metadata calls
    ```
@@ -1139,27 +1127,25 @@ Reorganize → assess impact → modify relationships → update snippets
 ### Tool Usage Frequency Guide:
 
 **Use Often:**
-- get_metadata_tree (with limited maxDepth)
+- get_metadata_tree (trying with limited maxDepth and if ti failes, try more depth until max)
+- get_metadata_forest (trying with limited maxDepth and if ti failes, try more depth until max)
 - get_metadata_siblings
 - get_snippets_by_metadata_intersection
+- get_metadata_siblings_forest
 - create_metadata_tree
 - create_snippet
 
 **Use Moderately:**
 - get_metadata_path
-- get_metadata_siblings_forest
 - get_snippets_by_metadata_subset
 - create_metadata_subtree
 - update_snippet_metadata
-
-**Use Rarely:**
-- get_whole_metadata_forest
-- get_metadata_forest (prefer specific searches)
 - add_metadata_parent
 - prune_metadata_branch
 
-**Use with Caution:**
-- delete_metadata (cascading effects)
-- delete_snippets (permanent)
+**Use Rarely:**
+- get_whole_metadata_forest
 
-This comprehensive guide should enable any LLM to effectively use the MSM system, adapting to both expert and novice users while maintaining efficiency and organization.
+**Use with Caution:**
+- delete_metadata 
+- delete_snippets (permanent)

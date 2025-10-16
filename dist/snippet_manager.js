@@ -78,7 +78,8 @@ export const createServer = (db) => {
         return {
             resources: [
                 { uri: "metadata://all", name: "All Metadata", description: "List of all metadata" },
-                { uri: "snippets://all", name: "All Snippets", description: "List of all snippets" }
+                { uri: "snippets://all", name: "All Snippets", description: "List of all snippets" },
+                { uri: "general://instructions", name: "Instructions", description: "Detailed operational guide for this MCP server", mimeType: "text/markdown" }
             ]
         };
     });
@@ -86,20 +87,14 @@ export const createServer = (db) => {
         const uri = request.params.uri;
         if (uri === "metadata://all") {
             const res = await db.getAllMetadata();
-            return {
-                contents: [
-                    { uri, mimeType: "application/json", text: JSON.stringify(res, null, 2) }
-                ]
-            };
+            return { contents: [{ uri, mimeType: "application/json", text: JSON.stringify(res, null, 2) }] };
         }
         if (uri === "snippets://all") {
             const res = await db.getAllSnippets();
-            return {
-                contents: [
-                    { uri, mimeType: "application/json", text: JSON.stringify(res, null, 2) }
-                ]
-            };
+            return { contents: [{ uri, mimeType: "application/json", text: JSON.stringify(res, null, 2) }] };
         }
+        if (uri === "general://instructions")
+            return { contents: [{ uri, mimeType: "text/markdown", text: instructions }] };
         throw new Error(`Unknown resource: ${uri}`);
     });
     server.setRequestHandler(ListToolsRequestSchema, async () => {

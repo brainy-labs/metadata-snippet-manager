@@ -33,7 +33,6 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 import { fileURLToPath } from "url";
 import { dirname, join, resolve } from "path";
 import { readFileSync } from "fs";
-import { ar } from "zod/v4/locales";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -119,7 +118,8 @@ export const createServer = (db: DB) => {
         return {
             resources: [
                 { uri: "metadata://all", name: "All Metadata", description: "List of all metadata" },
-                { uri: "snippets://all", name: "All Snippets", description: "List of all snippets" }
+                { uri: "snippets://all", name: "All Snippets", description: "List of all snippets" },
+                { uri: "general://instructions", name: "Instructions", description: "Detailed operational guide for this MCP server", mimeType: "text/markdown" }
             ]
         };
     });
@@ -129,21 +129,16 @@ export const createServer = (db: DB) => {
 
         if (uri === "metadata://all") {
             const res = await db.getAllMetadata();
-            return {
-                contents: [
-                    { uri, mimeType: "application/json", text: JSON.stringify(res, null, 2) }
-                ]
-            };
+            return { contents: [ { uri, mimeType: "application/json", text: JSON.stringify(res, null, 2) } ] };
         }
 
         if (uri === "snippets://all") {
             const res = await db.getAllSnippets();
-            return {
-                contents: [
-                    { uri, mimeType: "application/json", text: JSON.stringify(res, null, 2) }
-                ]
-            };
+            return { contents: [ { uri, mimeType: "application/json", text: JSON.stringify(res, null, 2) } ] };
         }
+
+        if (uri === "general://instructions") 
+            return { contents: [ { uri, mimeType: "text/markdown", text: instructions } ] };
 
         throw new Error(`Unknown resource: ${uri}`);
     });
