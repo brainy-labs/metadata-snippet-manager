@@ -12,7 +12,8 @@ export const SnippetSchema = z.object({
     size: z.number().positive(),
     createdAt: z.date(),
     metadataNames: z.array(z.string().min(1).toLowerCase()).min(1),
-    category: z.nativeEnum(MetadataCategory)
+    category: z.nativeEnum(MetadataCategory),
+    author: z.string().min(1).optional()
 }).refine(
     (data) => data.name.endsWith(`.${data.extension}`),
     {
@@ -27,7 +28,8 @@ export const CreateSnippetSchema = z.object({
     content: z.string(),
     extension: z.string().min(1).max(10).toLowerCase(),
     metadataNames: z.array(z.string().min(1).toLowerCase()).min(1),
-    category: z.nativeEnum(MetadataCategory)
+    category: z.nativeEnum(MetadataCategory),
+    author: z.string().min(1).optional()
 }).refine(
     (data) => data.name.endsWith(`.${data.extension}`),
     {
@@ -66,7 +68,8 @@ export type DeleteSnippetsInput = z.infer<typeof DeleteSnippetsSchema>;
 
 export const UpdateSnippetContentSchema = z.object({
     name: z.string().min(1).max(255).toLowerCase(),
-    content: z.string()
+    content: z.string(),
+    author: z.string().min(1).optional()
 });
 export type upDateSnippetContentInput = z.infer<typeof UpdateSnippetContentSchema>;
 

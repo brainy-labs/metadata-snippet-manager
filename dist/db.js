@@ -173,7 +173,8 @@ export class DB {
                     content: $content,
                     extension: $extension,
                     size: $size,
-                    createdAt: datetime()
+                    createdAt: datetime(),
+                    author: $author
                 })
                 WITH s
                 UNWIND $metadataNames as metadataName
@@ -186,12 +187,17 @@ export class DB {
                 extension: input.extension,
                 size: input.content.length,
                 metadataNames: input.metadataNames,
-                category: input.category
+                category: input.category,
+                author: input.author || null
             });
             const record = result.records[0];
             const snippet = record.get('s');
             console.error(snippet.properties);
-            return { ...snippet.properties, metadataNames: input.metadataNames };
+            return {
+                ...snippet.properties,
+                metadataNames: input.metadataNames,
+                author: snippet.properties.author || undefined
+            };
         }
         finally {
             await session.close();
@@ -232,12 +238,16 @@ export class DB {
                     size: s.size,
                     createdAt: s.createdAt,
                     category: head(categories),
-                    metadataNames: metadataNames
+                    metadataNames: metadataNames,
+                    author: s.author
                 } AS s
             `);
             const response = res.records.map(record => {
                 const node = record.get('s');
-                const snippet = node;
+                const snippet = {
+                    ...node,
+                    author: node.author || undefined
+                };
                 return snippet;
             });
             return response;
@@ -264,7 +274,8 @@ export class DB {
                     size: s.size,
                     createdAt: s.createdAt,
                     category: head(categories),
-                    metadataNames: metadataNames
+                    metadataNames: metadataNames,
+                    author: s.author
                 } AS s`, {
                 name: input.name,
             });
@@ -272,7 +283,10 @@ export class DB {
                 throw new Error(`Snippet doesn't exist`);
             }
             const s = res.records[0].get('s');
-            const snippet = s;
+            const snippet = {
+                ...s,
+                author: s.author || undefined
+            };
             return snippet;
         }
         finally {
@@ -287,10 +301,14 @@ export class DB {
     async updateSnippetContent(input) {
         const session = this.driver.session();
         try {
+            // Se author è fornito, lo aggiorniamo, altrimenti lo lasciamo invariato
+            const setClause = input.author
+                ? 'SET s.content = $content, s.size = $size, s.author = $author'
+                : 'SET s.content = $content, s.size = $size';
             const res = await session.run(`
                 MATCH (s:Snippet)-[:HAS_METADATA]->(m:Metadata)
                 WHERE s.name = $name
-                SET s.content = $content, s.size = $size
+                ${setClause}
                 WITH s, collect(DISTINCT m.category) AS categories, collect(DISTINCT m.name) AS metadataNames
                 RETURN {
                     name: s.name,
@@ -299,17 +317,22 @@ export class DB {
                     size: s.size,
                     createdAt: s.createdAt,
                     category: head(categories),
-                    metadataNames: metadataNames
+                    metadataNames: metadataNames,
+                    author: s.author
                 } AS s`, {
                 name: input.name,
                 content: input.content,
-                size: input.content.length
+                size: input.content.length,
+                author: input.author || null
             });
             if (res.records.length === 0) {
                 throw new Error(`Snippet doesn't exist`);
             }
             const s = res.records[0].get('s');
-            const snippet = s;
+            const snippet = {
+                ...s,
+                author: s.author || undefined
+            };
             return snippet;
         }
         finally {
@@ -799,13 +822,6 @@ export class DB {
             childTree: childTree
         };
     }
-    // TODO: traduzione di snippet
-    // TODO: update_metadata_name
-    /**
-     * ### Case 3: Migration/Refactoring
-       **"I want to rename 'sorting' to 'sort_algorithm'"**
-     */
-    // TODO: permessi metadati dello stesso nome ma con categorie diverse
     async renameMetadata(input) {
         const session = this.driver.session();
         try {
@@ -878,12 +894,16 @@ export class DB {
                     size: s.size,
                     createdAt: s.createdAt,
                     category: head(categories),
-                    metadataNames: allMetadataNames
+                    metadataNames: allMetadataNames,
+                    author: s.author
                 } AS snippet
             `, { metadataNames: input.metadataNames, requiredCount: input.metadataNames.length, category: input.category });
             return result.records.map(record => {
                 const snippet = record.get('snippet');
-                return snippet;
+                return {
+                    ...snippet,
+                    author: snippet.author || undefined
+                };
             });
         }
         finally {
@@ -925,7 +945,8 @@ export class DB {
                     size: s.size,
                     createdAt: s.createdAt,
                     category: head(categories),
-                    metadataNames: allMetadataNames
+                    metadataNames: allMetadataNames,
+                    author: s.author
                 } AS snippet, 
                 matchCount
                 ORDER BY matchCount DESC
@@ -937,7 +958,10 @@ export class DB {
                 const snippet = record.get('snippet');
                 const matchCount = record.get('matchCount').toNumber();
                 return {
-                    snippet: snippet,
+                    snippet: {
+                        ...snippet,
+                        author: snippet.author || undefined
+                    },
                     matchCount: matchCount
                 };
             });
@@ -981,7 +1005,8 @@ export class DB {
                     size: s.size,
                     createdAt: s.createdAt,
                     category: head(categories),
-                    metadataNames: metadataNames
+                    metadataNames: metadataNames,
+                    author: s.author
                 } AS s
             `, {
                 name: input.name,
@@ -989,7 +1014,10 @@ export class DB {
                 category: input.category
             });
             const snippet = result.records[0].get('s');
-            return snippet;
+            return {
+                ...snippet,
+                author: snippet.author || undefined
+            };
         }
         finally {
             await session.close();
@@ -1108,7 +1136,8 @@ export class DB {
                     size: s.size,
                     createdAt: s.createdAt,
                     category: head(categories),
-                    metadataNames: metadataNames
+                    metadataNames: metadataNames,
+                    author: s.author
                 } AS snippet
             `, { snippetName: input.snippetName });
             if (snippetResult.records.length === 0) {
@@ -1135,7 +1164,10 @@ export class DB {
                 };
             });
             return {
-                snippet: snippet,
+                snippet: {
+                    ...snippet,
+                    author: snippet.author || undefined
+                },
                 translations: translations
             };
         }
