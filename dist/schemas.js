@@ -84,6 +84,16 @@ export const CreateMetadataForestSchema = z.object({
 export const GetMetadataForestSchema = z.object({
     names: z.array(GetMetadataTreeSchema)
 });
+export const MetadataForestStatusSchema = z.array(z.object({
+    name: z.string().min(1).max(100).toLowerCase(),
+    tree: MetadataTreeNodeSchema.optional(),
+    status: z.string(),
+    error: z.string().optional()
+}));
+export const MetadataForestSuccessSchema = z.object({
+    results: MetadataForestStatusSchema,
+    success: z.enum(["success", "partial success", "error"])
+});
 export const GetMetadataPathSchema = z.object({
     name: z.string().min(1).max(100).toLowerCase()
 });

@@ -123,6 +123,20 @@ export const  GetMetadataForestSchema = z.object({
 });
 export type GetMetadataForestInput = z.infer<typeof GetMetadataForestSchema>;
 
+export const MetadataForestStatusSchema = z.array(z.object({
+    name: z.string().min(1).max(100).toLowerCase(),
+    tree: MetadataTreeNodeSchema.optional(),
+    status: z.string(),
+    error: z.string().optional()
+}));
+export type MetadataForestStatus = z.infer<typeof MetadataForestStatusSchema>;
+
+export const MetadataForestSuccessSchema = z.object({
+    results: MetadataForestStatusSchema,
+    success: z.enum(["success", "partial success", "error"])
+});
+export type MetadataForestSuccess = z.infer<typeof MetadataForestSuccessSchema>;
+
 export const GetMetadataPathSchema = z.object({
     name: z.string().min(1).max(100).toLowerCase()
 });

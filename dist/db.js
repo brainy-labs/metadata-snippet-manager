@@ -614,11 +614,36 @@ export class DB {
     /**
      * Get a metadata forest by the roots, it works for mid-nodes as well
      * @param input a list of root names
-     * @returns a json like forest
+     * @returns an object with status information and the forest trees
      */
     async getMetadataForest(input) {
-        const metadataForest = await Promise.all(input.names.map(name => this.getMetadataTree(name)));
-        return metadataForest;
+        const results = [];
+        for (const treeInput of input.names) {
+            try {
+                const tree = await this.getMetadataTree(treeInput);
+                results.push({
+                    name: treeInput.name,
+                    tree: tree,
+                    status: "retrieved"
+                });
+            }
+            catch (err) {
+                results.push({
+                    name: treeInput.name,
+                    status: "error",
+                    error: err.message
+                });
+            }
+        }
+        let success = "partial success";
+        if (results.every(r => r.status === "retrieved"))
+            success = "success";
+        else if (results.every(r => r.status === "error"))
+            success = "error";
+        return {
+            results,
+            success
+        };
     }
     /**
      * Get the whole metadata forest

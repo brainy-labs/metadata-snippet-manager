@@ -51,7 +51,7 @@ type ToolInput = z.infer<typeof ToolInputSchema>;
 
 enum ToolName {
     // TEST_DB = "test_db",
-    // CLEAR = "clear",
+    CLEAR = "clear",
     CLEAR_CONSTRAINTS = "clear_constraints",
     // GET_ALL_SNIPPETS = "get_all_snippets",
     // GET_ALL_METADATA = "get_all_metadata",
@@ -148,7 +148,7 @@ export const createServer = (db: DB) => {
     server.setRequestHandler(ListToolsRequestSchema, async () => {
         const tools: Tool[] = [
             // { name: ToolName.TEST_DB, description: "Tests db connection", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
-            // { name: ToolName.CLEAR, description: "Clear all data", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
+            { name: ToolName.CLEAR, description: "Clear all data", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
             { name: ToolName.CLEAR_CONSTRAINTS, description: "Clear db constraints", inputSchema: zodToJsonSchema(z.object({})) as ToolInput },
             { name: ToolName.CREATE_METADATA, description: "Create a metadata. Insert the name, the category (concept or language) and the parent", inputSchema: zodToJsonSchema(CreateMetadataSchema) as ToolInput },
             { name: ToolName.CREATE_SNIPPET, description: "Create a snippet with metadata. All metadata have the same category. The name has to be lowercase, no spaces, ending with the extension (for example .py)", inputSchema: zodToJsonSchema(CreateSnippetSchema) as ToolInput },
@@ -198,7 +198,7 @@ export const createServer = (db: DB) => {
                 return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'DB test failed' }) }] };
             }
         }*/
-        /*
+        
         if (name === ToolName.CLEAR) {
             try {
                 await db.clear();
@@ -206,7 +206,7 @@ export const createServer = (db: DB) => {
             } catch (error: any) { 
                 return { content: [{ type: "text", text: JSON.stringify({ success: false, error: error.message || 'Failed to clear DB' }) }] };
             }
-        }*/
+        }
 
         if (name === ToolName.CLEAR_CONSTRAINTS) {
             try {

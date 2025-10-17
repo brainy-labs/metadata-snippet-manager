@@ -21,6 +21,7 @@ import {
     GetSnippetTranslationsInput,
     Metadata, 
     MetadataCategory, 
+    MetadataForestSuccess, 
     MetadataParentChildStatus, 
     MetadataParentChildSuccess, 
     MetadataPath, 
@@ -733,20 +734,48 @@ export class DB {
     /**
      * Get a metadata forest by the roots, it works for mid-nodes as well 
      * @param input a list of root names
-     * @returns a json like forest
+     * @returns an object with status information and the forest trees
      */
-    async getMetadataForest(input: GetMetadataForestInput): Promise<MetadataTreeNode[]> {
-        const metadataForest = await Promise.all(
-            input.names.map(name => this.getMetadataTree(name))
-        );
-        return metadataForest;
-    }
+    async getMetadataForest(input: GetMetadataForestInput): Promise<MetadataForestSuccess> {
+        const results: Array<{
+            name: string;
+            tree?: MetadataTreeNode;
+            status: string;
+            error?: string
+        }> = [];
+
+        for (const treeInput of input.names) {
+            try {
+                const tree = await this.getMetadataTree(treeInput);
+                results.push({
+                    name: treeInput.name,
+                    tree: tree,
+                    status: "retrieved"
+                });
+            } catch (err: any) {
+                results.push({
+                    name: treeInput.name,
+                    status: "error",
+                    error: err.message
+                });
+            }
+        }
+
+        let success: "error" | "success" | "partial success" = "partial success";
+        if (results.every(r => r.status === "retrieved")) success = "success";
+        else if (results.every(r => r.status === "error")) success = "error";
+
+        return {
+            results,
+            success
+        };
+    } 
 
     /**
      * Get the whole metadata forest 
      * @returns a list of all roots with their descendants 
      */
-    async getWholeMetadataForest(): Promise<MetadataTreeNode[]> {
+    async getWholeMetadataForest(): Promise<MetadataForestSuccess>{
         const session = this.driver.session();
         let roots: GetMetadataForestInput = { names: [] };
 
